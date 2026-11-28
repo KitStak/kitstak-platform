@@ -79,3 +79,21 @@ describe('appSwitcherRow', () => {
     });
   });
 });
+
+describe('preview apps (Crew, Ledger)', () => {
+  const crew = { id: 'crew', name: 'KitStak Crew' } as const;
+
+  it('opens Crew from its own origin and never shows a plan badge or an add to plan link', () => {
+    const row = appSwitcherRow(crew, {
+      current: 'pulse',
+      urls: { ...urls, crew: 'https://crew.test' },
+      planBadges: { pulse: 'trial' },
+      addHref: () => 'https://portal.test/billing/plan?add=x',
+    });
+    expect(row).toMatchObject({ locked: false, href: 'https://crew.test', badge: null });
+  });
+
+  it('lists Crew as the current app inside Crew even with no origin passed', () => {
+    expect(appSwitcherRow(crew, { current: 'crew', urls })).toMatchObject({ locked: false, badge: null });
+  });
+});

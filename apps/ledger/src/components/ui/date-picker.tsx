@@ -1,0 +1,232 @@
+'use client';
+import { useState, type ReactNode } from 'react';
+import { DayPicker, type DateRange, type Matcher } from 'react-day-picker';
+import { addDays, format, isValid, nextMonday, startOfToday } from 'date-fns';
+import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { cn } from './cn';
+import { Button } from './button';
+import { Popover, PopoverContent, PopoverTrigger } from './popover';
+
+export type { DateRange, Matcher };
+
+/** Shared DayPicker theming: tokens drive every color; layout via our utility classes. */
+const dayPickerClassNames = {
+  root: 'ks-day-picker text-base',
+  months: 'relative flex flex-wrap gap-6',
+  month_caption: 'flex h-8 pointer-coarse:h-11 items-center px-1 text-base font-semibold',
+  nav: 'absolute top-0 right-0 flex items-center gap-0.5',
+  // On a touch screen the day cells, the month arrows and the shortcuts are 44px, so a thumb hits one day.
+  button_previous:
+    'pointer-coarse:size-11 inline-flex size-8 items-center justify-center rounded-sm text-icon hover:bg-hover hover:text-icon-strong disabled:opacity-40',
+  button_next:
+    'pointer-coarse:size-11 inline-flex size-8 items-center justify-center rounded-sm text-icon hover:bg-hover hover:text-icon-strong disabled:opacity-40',
+  weekday: 'h-8 w-9 pointer-coarse:w-11 text-xs font-semibold text-fg-muted',
+  /** No cell spacing so a selected range reads as one continuous band. */
+  month_grid: 'border-collapse',
+  day: 'p-0 text-center',
+  day_button:
+    'inline-flex size-9 pointer-coarse:size-11 items-center justify-center rounded-sm text-base text-fg transition-colors duration-[var(--duration-instant)] hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus',
+  today: 'font-bold text-primary-text',
+  selected: '[&>button]:bg-primary [&>button]:text-primary-fg [&>button]:hover:bg-primary-hover',
+  range_middle: '[&>button]:!bg-primary-selected [&>button]:!text-fg [&>button]:rounded-none rounded-none',
+  /** Endpoints win over the outside-day dimming so both ends of a range look identical. */
+  range_start: '[&>button]:rounded-r-none !opacity-100 [&>button]:!bg-primary [&>button]:!text-primary-fg',
+  range_end: '[&>button]:rounded-l-none !opacity-100 [&>button]:!bg-primary [&>button]:!text-primary-fg',
+  outside: 'text-fg-muted opacity-60',
+  disabled: 'opacity-35 [&>button]:cursor-not-allowed',
+} as const;
+
+const components = {
+  Chevron: ({ orientation }: { orientation?: 'left' | 'right' | 'up' | 'down' }) =>
+    orientation === 'left' ? <ChevronLeft aria-hidden className="size-4" /> : <ChevronRight aria-hidden className="size-4" />,
+};
+
+export interface CalendarProps {
+  readonly selected: Date | undefined;
+  readonly onSelect: (date: Date | undefined) => void;
+  readonly weekStartsOn?: 0 | 1;
+  /** Extra day modifiers (e.g. days that also move another date), styled with `modifiersClassNames`. */
+  readonly modifiers?: Record<string, Matcher | Matcher[]>;
+  readonly modifiersClassNames?: Record<string, string>;
+  /** Small note under the grid. */
+  readonly footer?: ReactNode;
+  /** Days that cannot be picked, like every day after today. */
+  readonly disabled?: Matcher | Matcher[];
+}
+
+/** Inline single-date calendar. */
+/** Weeks start on Monday, like the project Calendar and Workload views. */
+export function Calendar({ selected, onSelect, weekStartsOn = 1, modifiers, modifiersClassNames, footer, disabled }: CalendarProps) {
+  return (
+    <DayPicker
+      mode="single"
+      selected={selected}
+      onSelect={onSelect}
+      defaultMonth={selected}
+      disabled={disabled}
+      weekStartsOn={weekStartsOn}
+      showOutsideDays
+      fixedWeeks
+      classNames={dayPickerClassNames}
+      components={components}
+      modifiers={modifiers}
+      modifiersClassNames={modifiersClassNames}
+      footer={footer}
+    />
+  );
+}
+
+export interface RangeCalendarProps {
+  readonly selected: DateRange | undefined;
+  readonly onSelect: (range: DateRange | undefined) => void;
+  readonly numberOfMonths?: number;
+}
+
+export function RangeCalendar({ selected, onSelect, numberOfMonths = 2 }: RangeCalendarProps) {
+  return (
+    <DayPicker
+      mode="range"
+      selected={selected}
+      onSelect={onSelect}
+      defaultMonth={selected?.from}
+      numberOfMonths={numberOfMonths}
+      weekStartsOn={1}
+      showOutsideDays
+      classNames={dayPickerClassNames}
+      components={components}
+    />
+  );
+}
+
+export interface DatePickerProps {
+  readonly value: Date | null;
+  readonly onChange: (date: Date | null) => void;
+  readonly placeholder?: string;
+  readonly displayFormat?: string;
+  readonly disabled?: boolean;
+  readonly clearable?: boolean;
+  readonly id?: string;
+  readonly 'aria-label'?: string;
+  readonly 'aria-describedby'?: string;
+  readonly className?: string;
+  /** Extra classes for the trigger itself (a taller box on touch screens). */
+  readonly triggerClassName?: string;
+  /** Trigger height: `md` 32px (default), `lg` 40px to line up with `size="lg"` inputs and selects. */
+  readonly size?: 'md' | 'lg';
+  readonly invalid?: boolean;
+  /** The last day that can be picked. Later days are greyed out in the calendar. */
+  readonly maxDate?: Date;
+  /** The first day that can be picked. Earlier days are greyed out in the calendar. */
+  readonly minDate?: Date;
+  /** The shortcut rows next to the calendar. Default: Today, Tomorrow, Next week, In 2 weeks. */
+  readonly quickPicks?: readonly QuickPick[];
+  /** Start with the calendar open (a table cell that turns into a picker on a click). */
+  readonly defaultOpen?: boolean;
+  /** Told each time the calendar opens or closes. */
+  readonly onOpenChange?: (open: boolean) => void;
+  readonly 'data-testid'?: string;
+}
+
+export interface QuickPick {
+  readonly label: string;
+  readonly date: () => Date;
+}
+
+const QUICK_PICKS: readonly QuickPick[] = [
+  { label: 'Today', date: () => startOfToday() },
+  { label: 'Tomorrow', date: () => addDays(startOfToday(), 1) },
+  { label: 'Next week', date: () => nextMonday(startOfToday()) },
+  { label: 'In 2 weeks', date: () => addDays(startOfToday(), 14) },
+];
+
+/** Field-style trigger with a calendar popover and quick picks. */
+export function DatePicker({
+  value,
+  onChange,
+  placeholder = 'Pick a date',
+  displayFormat = 'MMM d, yyyy',
+  disabled,
+  clearable = true,
+  id,
+  className,
+  triggerClassName,
+  size = 'md',
+  invalid,
+  maxDate,
+  minDate,
+  quickPicks = QUICK_PICKS,
+  defaultOpen = false,
+  onOpenChange,
+  'data-testid': testId,
+  ...aria
+}: DatePickerProps) {
+  const [open, setOpenState] = useState(defaultOpen);
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
+  const valid = value && isValid(value) ? value : null;
+  const choose = (date: Date | null) => {
+    // A box that cannot be empty keeps its day when the picked day is clicked again.
+    if (date !== null || clearable) onChange(date);
+    setOpen(false);
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <div className={cn('relative w-full', className)}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            id={id}
+            aria-label={aria['aria-label']}
+            aria-describedby={aria['aria-describedby']}
+            data-invalid={invalid ? 'true' : undefined}
+            data-testid={testId}
+            disabled={disabled}
+            className={cn(
+              'inline-flex w-full items-center gap-2 rounded-md border border-border-input bg-panel text-left text-sm',
+              size === 'lg' ? 'h-10 px-3' : 'h-8 px-2.5',
+              'transition-[border-color,box-shadow] duration-[var(--duration-fast)] outline-none hover:border-border-input-hover',
+              'focus-visible:border-focus focus-visible:shadow-[0_0_0_3px_var(--focus-ring-soft)] data-[state=open]:border-focus',
+              'disabled:cursor-not-allowed disabled:opacity-60 data-[invalid=true]:border-danger data-[invalid=true]:shadow-[inset_0_0_0_1px_var(--danger)] data-[invalid=true]:focus-visible:border-danger data-[invalid=true]:focus-visible:shadow-[inset_0_0_0_1px_var(--danger),0_0_0_3px_var(--focus-ring-soft)]',
+              valid ? 'text-fg' : 'text-fg-placeholder',
+              clearable && valid && 'pr-8',
+              triggerClassName,
+            )}
+          >
+            <CalendarDays aria-hidden className="size-4 shrink-0 text-icon" />
+            <span className="truncate">{valid ? format(valid, displayFormat) : placeholder}</span>
+          </button>
+        </PopoverTrigger>
+        {clearable && valid && !disabled ? (
+          <button
+            type="button"
+            aria-label="Clear date"
+            onClick={() => onChange(null)}
+            className="absolute top-1/2 right-1.5 inline-flex size-5 -translate-y-1/2 items-center justify-center rounded-xs text-icon hover:bg-hover hover:text-icon-strong focus-visible:outline-2 focus-visible:outline-focus"
+          >
+            <X aria-hidden className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
+      {/* On a phone the shortcuts sit in a row above the calendar, so the whole week fits on screen. */}
+      <PopoverContent flush className="flex flex-col sm:flex-row">
+        <div className="flex flex-row flex-wrap gap-0.5 border-b border-border-subtle p-2 sm:w-32 sm:flex-col sm:flex-nowrap sm:border-r sm:border-b-0">
+          {quickPicks.map((pick) => (
+            <Button key={pick.label} variant="ghost" size="sm" className="justify-start pointer-coarse:h-11 pointer-coarse:px-3" onClick={() => choose(pick.date())}>
+              {pick.label}
+            </Button>
+          ))}
+          {valid && clearable ? (
+            <Button variant="danger-ghost" size="sm" className="justify-start sm:mt-auto pointer-coarse:h-11 pointer-coarse:px-3" onClick={() => choose(null)}>
+              Clear
+            </Button>
+          ) : null}
+        </div>
+        <div className="p-3">
+          <Calendar selected={valid ?? undefined} onSelect={(date) => choose(date ?? null)} disabled={[...(maxDate ? [{ after: maxDate }] : []), ...(minDate ? [{ before: minDate }] : [])]} />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}

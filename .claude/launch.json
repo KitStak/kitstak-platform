@@ -60,6 +60,26 @@
         "dev"
       ],
       "port": 3400
+    },
+    {
+      "name": "ledger",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--dir",
+        "apps/ledger",
+        "dev"
+      ],
+      "port": 3700
+    },
+    {
+      "name": "crew",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--dir",
+        "apps/crew",
+        "dev"
+      ],
+      "port": 3800
     }
   ]
 }

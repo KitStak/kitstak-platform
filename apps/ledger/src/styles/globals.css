@@ -1,0 +1,596 @@
+@import 'tailwindcss';
+@import '@kitstak/ui/styles/tokens.css';
+/* The shared logo component uses Tailwind utilities; include its source in the scan. */
+@source '../../../../packages/ui/src/logo';
+
+/*
+ * Focus is blue in Pulse. The shared crimson focus ring sat next to the red of an error (200,16,46
+ * against 179,17,44), so a field that only had focus looked like a field with a mistake. Blue keeps
+ * at least 5:1 against every surface in both themes, and an error keeps its red double edge.
+ */
+:root {
+  --focus-ring: #2d5c94;
+  --focus-ring-soft: rgb(45 92 148 / 0.3);
+}
+:root[data-theme='dark'] {
+  --focus-ring: #6b9ddc;
+  --focus-ring-soft: rgb(107 157 220 / 0.38);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --focus-ring: #6b9ddc;
+    --focus-ring-soft: rgb(107 157 220 / 0.38);
+  }
+}
+
+/* Dark variant follows the resolved theme attribute (set before paint by the theme script). */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/*
+ * Tailwind theme → design tokens. `inline` makes utilities read the token variables directly,
+ * so a theme switch is a single attribute change with no class churn.
+ */
+@theme inline {
+  --color-app: var(--surface-app);
+  --color-panel: var(--surface-panel);
+  --color-raised: var(--surface-raised);
+  --color-sunken: var(--surface-sunken);
+  --color-muted: var(--surface-muted);
+  --color-hover: var(--surface-hover);
+  --color-pressed: var(--surface-pressed);
+  --color-selected: var(--surface-selected);
+  --color-selected-hover: var(--surface-selected-hover);
+  --color-highlight: var(--surface-highlight);
+  --color-inverse: var(--surface-inverse);
+  --color-overlay: var(--surface-overlay);
+  --color-skeleton: var(--surface-skeleton);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-border-input: var(--border-input);
+  --color-border-input-hover: var(--border-input-hover);
+
+  --color-fg: var(--text-primary);
+  --color-fg-secondary: var(--text-secondary);
+  --color-fg-muted: var(--text-muted);
+  --color-fg-disabled: var(--text-disabled);
+  --color-fg-placeholder: var(--text-placeholder);
+  --color-fg-inverse: var(--text-inverse);
+  --color-fg-link: var(--text-link);
+  --color-icon: var(--icon-default);
+  --color-icon-strong: var(--icon-strong);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-selected: var(--primary-selected);
+  --color-primary-selected-hover: var(--primary-selected-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-text: var(--primary-text);
+  --color-focus: var(--focus-ring);
+
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-hover: var(--warning-hover);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-text: var(--warning-text);
+  --color-warning-accent: var(--warning-accent);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-active: var(--danger-active);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-danger-text: var(--danger-text);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-text: var(--info-text);
+
+  --font-sans: var(--font-ui);
+  /* Headings share the UI face. `font-heading` is kept so existing classes still resolve. */
+  --font-heading: var(--font-ui);
+  --font-display: var(--font-display);
+
+  --shadow-xs: var(--elevation-xs);
+  --shadow-sm: var(--elevation-sm);
+  --shadow-md: var(--elevation-md);
+  --shadow-lg: var(--elevation-lg);
+  --shadow-popover: var(--elevation-popover);
+  --shadow-modal: var(--elevation-modal);
+  --shadow-sticky: var(--elevation-sticky);
+}
+
+/* Static scales (not theme dependent). 1 spacing unit = 4px regardless of root font size. */
+@theme {
+  --spacing: 4px;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --text-2xs: 11px;
+  --text-2xs--line-height: 14px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 18px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-md: 16px;
+  --text-md--line-height: 22px;
+  --text-lg: 18px;
+  --text-lg--line-height: 24px;
+  --text-xl: 24px;
+  --text-xl--line-height: 30px;
+  --text-2xl: 32px;
+  --text-2xl--line-height: 40px;
+
+  --animate-fade-in: ks-fade-in 150ms var(--ease-enter);
+  --animate-fade-out: ks-fade-out 120ms var(--ease-exit);
+  --animate-pop-in: ks-pop-in 160ms var(--ease-enter);
+  --animate-pop-out: ks-pop-out 110ms var(--ease-exit);
+  --animate-slide-in-right: ks-slide-in-right 250ms var(--ease-enter);
+  --animate-slide-out-right: ks-slide-out-right 180ms var(--ease-exit);
+  --animate-slide-in-left: ks-slide-in-left 250ms var(--ease-enter);
+  --animate-slide-out-left: ks-slide-out-left 180ms var(--ease-exit);
+  --animate-dialog-in: ks-dialog-in 220ms var(--ease-enter);
+  --animate-dialog-out: ks-dialog-out 140ms var(--ease-exit);
+  --animate-shimmer: ks-shimmer 1.4s ease-in-out infinite;
+  --animate-spin: spin 0.7s linear infinite;
+  --animate-confetti-fall: ks-confetti-fall 1200ms ease-in forwards;
+  --animate-step-in: ks-step-in 240ms var(--ease-enter);
+  --animate-check-pop: ks-check-pop 350ms var(--ease-enter);
+
+  @keyframes ks-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes ks-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes ks-pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--ks-pop-offset, -4px)) scale(0.98);
+    }
+  }
+  @keyframes ks-pop-out {
+    to {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+  }
+  /* Getting-started celebration confetti (token colors; hidden under reduced motion). */
+  @keyframes ks-step-in {
+    from {
+      opacity: 0;
+      transform: translateX(16px);
+    }
+  }
+  @keyframes ks-check-pop {
+    0% {
+      transform: scale(0.4);
+      opacity: 0;
+    }
+    65% {
+      transform: scale(1.18);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes ks-confetti-fall {
+    from {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(150px) rotate(var(--ks-confetti-spin, 540deg));
+      opacity: 0;
+    }
+  }
+  @keyframes ks-peek-in {
+    from {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+  }
+  @keyframes ks-slide-in-left {
+    from {
+      transform: translateX(-100%);
+    }
+  }
+  @keyframes ks-slide-out-left {
+    to {
+      transform: translateX(-100%);
+    }
+  }
+  @keyframes ks-slide-in-right {
+    from {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes ks-slide-out-right {
+    to {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes ks-dialog-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.97);
+    }
+  }
+  @keyframes ks-dialog-out {
+    to {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+  }
+  @keyframes ks-shimmer {
+    0% {
+      background-position: 120% 0;
+    }
+    100% {
+      background-position: -20% 0;
+    }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: var(--surface-app);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: var(--type-base);
+    line-height: var(--type-base-lh);
+    font-feature-settings: 'cv05', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Data reads in columns: tables and numeric inputs get tabular numerals by default. */
+  table,
+  [role='grid'],
+  [role='table'],
+  input[type='number'] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Headings use the UI face (Inter); only weight, size and tracking set them apart. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: var(--primary-200);
+    color: var(--text-primary);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  button,
+  [role='button'] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-placeholder);
+    opacity: 1;
+  }
+
+  /* Thin, theme-aware scrollbars everywhere. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+}
+
+@layer components {
+  /* Skeleton shimmer surface: a moving highlight across the skeleton tone. */
+  .ks-skeleton {
+    background-color: var(--surface-skeleton);
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--surface-skeleton-shine) 50%,
+      transparent 100%
+    );
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    animation: var(--animate-shimmer);
+  }
+
+  /* Menu / listbox row used by dropdowns, context menus, selects and comboboxes. */
+  .ks-menu-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 32px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    font-size: var(--type-base);
+    line-height: var(--type-base-lh);
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+    transition: background-color var(--duration-instant) var(--ease-out);
+  }
+  .ks-menu-item[data-highlighted],
+  .ks-menu-item[data-selected='true'],
+  .ks-menu-item[aria-selected='true'] {
+    background: var(--surface-hover);
+  }
+  .ks-menu-item[data-state='open'] {
+    background: var(--surface-hover);
+  }
+  .ks-menu-item[data-disabled]:not([data-disabled='false']) {
+    color: var(--text-disabled);
+    cursor: not-allowed;
+  }
+  .ks-menu-item[data-variant='danger'] {
+    color: var(--danger-text);
+  }
+  .ks-menu-item[data-variant='danger'][data-highlighted] {
+    background: var(--danger-subtle);
+  }
+  .ks-menu-item > svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--icon-default);
+  }
+  .ks-menu-item[data-variant='danger'] > svg {
+    color: currentColor;
+  }
+
+  .ks-popover-surface {
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--elevation-popover);
+  }
+}
+
+/* Radix popper content animates from its side. */
+[data-radix-popper-content-wrapper] [data-side='top'] {
+  --ks-pop-offset: 4px;
+}
+[data-radix-popper-content-wrapper] [data-side='bottom'] {
+  --ks-pop-offset: -4px;
+}
+
+/*
+ * Keyboard focus must always show. In Tailwind 4 `outline-none` also switches the outline style
+ * variable off, so a control written as `outline-none focus-visible:outline-2` (the top nav links,
+ * for one) drew no ring at all. Turning the variable back on while a key moved the focus makes the
+ * `focus-visible:outline-*` classes work as written. Controls with no such class are not touched.
+ */
+:focus-visible {
+  --tw-outline-style: solid;
+}
+
+/*
+ * A grid item is as wide as its widest word or field by default, so one long row could push a
+ * whole card past the edge of a phone. Let grid items shrink; a `min-w-*` class still wins.
+ */
+@layer base {
+  :where(.grid) > :where(*) {
+    min-width: 0;
+  }
+}
+
+/*
+ * Touch targets. The house controls are compact (24 to 36px tall), which is right for a mouse and
+ * too small for a thumb. On touch screens every button, tab, checkbox and button-like link gets an
+ * invisible hit area of at least 44 by 44px, centered on the control, so nothing moves on screen.
+ * Menu rows and list options fill their row, so they get the height only (below, outside the layer
+ * so it beats the 32px row in the components layer).
+ */
+@layer base {
+  @media (pointer: coarse) {
+    :where(button, [role='button'], [role='tab'], [role='checkbox'], [role='switch'], [role='radio'], summary, a[class*='inline-flex'], a[class*='size-']):where(:not([role='menuitem'], [role='option'], [data-touch='off'])) {
+      position: relative;
+    }
+    :where(button, [role='button'], [role='tab'], [role='checkbox'], [role='switch'], [role='radio'], summary, a[class*='inline-flex'], a[class*='size-']):where(:not([role='menuitem'], [role='option'], [data-touch='off']))::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+    /* A sideways scroller (tab rows, pill rows) must not start scrolling up and down by the few
+       pixels the hit areas reach past it. */
+    [class*='overflow-x-auto']:where(:not([class*='overflow-y-'])) {
+      overflow-y: hidden;
+    }
+  }
+}
+
+@media (pointer: coarse) {
+  .ks-menu-item {
+    min-height: 44px;
+  }
+}
+
+/* Phones zoom the whole page when a field with text under 16px gets focus. Keep fields at 16px there. */
+@media (pointer: coarse) and (max-width: 767px) {
+  input:not([type='checkbox'], [type='radio'], [type='range']),
+  select,
+  textarea,
+  button[role='combobox'] {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Route progress bar (src/features/shell/route-progress.tsx): eases toward 90% and waits. */
+@keyframes ks-route-progress {
+  from {
+    transform: scaleX(0.04);
+  }
+  to {
+    transform: scaleX(0.9);
+  }
+}
+
+@keyframes ks-indeterminate {
+  0% {
+    left: -35%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* The KitStak lockup (.ks-logo/.ks-wordtype/...) is shared: packages/ui/src/logo/logo.css,
+   imported by the @kitstak/ui/logo component. */
+
+/* ---------------------------------------------------------------------------------------------
+ * Brand panel (auth showcase + onboarding rail). Flat --surface-brand: KitStak navy on light,
+ * charcoal on dark. No glow and no gradient; the dark panel is set apart by a 1px border.
+ * ------------------------------------------------------------------------------------------- */
+.auth-hero {
+  --logo-ink: var(--brand-cream);
+  background: var(--surface-brand);
+}
+
+:root[data-theme='dark'] .auth-hero {
+  box-shadow: inset -1px 0 0 var(--border-subtle);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .auth-hero {
+    box-shadow: inset -1px 0 0 var(--border-subtle);
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * Rich text (task / project / goal descriptions rendered from sanitized editor HTML).
+ * ------------------------------------------------------------------------------------------- */
+.ks-prose {
+  color: var(--text-primary);
+  font-size: var(--type-base);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.ks-prose > * + * {
+  margin-top: 0.6em;
+}
+.ks-prose h1,
+.ks-prose h2,
+.ks-prose h3 {
+  font-weight: 600;
+  line-height: 1.3;
+}
+.ks-prose h1 {
+  font-size: var(--text-lg);
+}
+.ks-prose h2 {
+  font-size: var(--text-md);
+}
+.ks-prose h3 {
+  font-size: var(--text-base);
+}
+.ks-prose ul {
+  list-style: disc;
+  padding-left: 1.4em;
+}
+.ks-prose ol {
+  list-style: decimal;
+  padding-left: 1.4em;
+}
+.ks-prose ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.ks-prose a {
+  color: var(--text-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ks-prose code {
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunken);
+  padding: 0.1em 0.35em;
+  font-size: 0.92em;
+}
+.ks-prose pre {
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  padding: 0.75em 1em;
+  overflow-x: auto;
+}
+.ks-prose pre code {
+  background: transparent;
+  padding: 0;
+}
+.ks-prose blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 0.9em;
+  color: var(--text-secondary);
+}
+.ks-prose hr {
+  border: 0;
+  border-top: 1px solid var(--border-default);
+}
+.ks-prose [data-type='mention'] {
+  border-radius: var(--radius-xs);
+  background: var(--primary-subtle);
+  color: var(--primary-text);
+  padding: 0 0.2em;
+  font-weight: 500;
+}
+
+/*
+ * Task and project keys (OPS-42): the UI sans face with tabular figures. Monospace faces on some
+ * systems draw the letter O nearly like the digit 0 ("0PS-1"), so keys never use font-mono.
+ */
+@utility font-key {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}

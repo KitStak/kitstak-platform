@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="KitStak ledger loader">
+<style>
+rect,polygon{transform-box:fill-box}
+/* Ledger: the bar opens, then the stem drops */
+.tbar { animation: tbar 2.4s infinite; transform-origin: center; }
+.tstem { animation: tstem 2.4s infinite; transform-origin: center top; }
+@keyframes tbar {
+  0% { transform: scaleX(0); }
+  6% { transform: scaleX(0); animation-timing-function: cubic-bezier(.34,1.4,.64,1); }
+  24% { transform: scaleX(1); }
+  80% { transform: scaleX(1); }
+  92%, 100% { transform: scaleX(0); }
+}
+@keyframes tstem {
+  0%, 20% { transform: scaleY(0); animation-timing-function: cubic-bezier(.22,1,.36,1); }
+  40% { transform: scaleY(1); }
+  76% { transform: scaleY(1); }
+  88%, 100% { transform: scaleY(0); }
+}
+@media (prefers-reduced-motion: reduce){*{animation:none!important}}
+</style>
+<rect class="tbar" x="46" y="50" width="108" height="26" fill="#C8102E"/><rect class="tstem" x="87" y="87" width="26" height="63" fill="#D65A6E"/>
+</svg>
