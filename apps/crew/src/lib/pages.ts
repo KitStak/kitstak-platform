@@ -41,6 +41,9 @@ export const PHASE_NAMES: Readonly<Record<BuildPhase, string>> = {
   8: 'Connected apps',
 };
 
+/** The last build phase that is live: pages of this phase or earlier render their real screens. */
+export const BUILT_PHASE: BuildPhase = 1;
+
 /** "Arrives in phase 3: Time clock". */
 export function arrivesIn(phase: BuildPhase): string {
   return `Arrives in phase ${phase}: ${PHASE_NAMES[phase]}`;
@@ -58,7 +61,7 @@ export const CREW_PAGES: readonly CrewPage[] = [
     points: ['Who is clocked in, since when, and on which job or area', 'Who is late after the grace time, with the minutes', 'Who is out today, and who is here with no shift', 'Mark someone as called out with one tap'],
   },
   {
-    id: 'people', path: '/people', title: 'People', nav: 'people', icon: 'people', phase: 1, needs: 'person:manage',
+    id: 'people', path: '/people', title: 'People', nav: 'people', icon: 'people', phase: 1, needs: 'crew:read',
     why: 'Everyone who works the floor lives here, temps included. Most people never need a login.',
     points: ['Search and filter by site, kind, status and agency', 'Bulk actions: set site, set lead, print PIN slips', 'Export the list you are looking at as a CSV file', 'Bring in a whole agency crew from one file'],
   },
@@ -68,7 +71,7 @@ export const CREW_PAGES: readonly CrewPage[] = [
     points: ['Crew makes a number for temps when you leave it blank', 'Link the person to a login so they can use the phone clock', 'Pay and private details only for people allowed to see them', 'Print a PIN slip for the time clock when you save'],
   },
   {
-    id: 'person', path: '/people/[id]', title: 'Person', nav: 'people', icon: 'person', phase: 1, needs: 'person:manage',
+    id: 'person', path: '/people/[id]', title: 'Person', nav: 'people', icon: 'person', phase: 1, needs: 'crew:read',
     why: 'Everything about one person in one place, with tabs for their schedule, time, attendance and skills.',
     points: ['Status, site, labor class, lead and agency', 'Kiosk PIN and badge resets', 'Pay type and dated wages, for payroll only', 'Every change, with who made it and when'],
   },

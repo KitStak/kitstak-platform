@@ -911,39 +911,41 @@ RLS policies and the `crew_app` role, the migrate runner, `@kitstak/crew-bridge`
 orgs, the brand pack, the welcome claim step, port 3800 wiring, Vercel project. Done when: a preview org signs in at `crew.kitstak.app`
 and sees the shell; an unlisted org sees the locked screen; the migration chain on an empty database passes; RLS and guard tests pass.
 
+Migration numbers: `0001_crew_user_delete.sql` (lets a person who acted in Crew be deleted: `crew.activity.actor_id` may go to null, nothing else may change) shipped with Phase 1, so each later phase's migration is one number higher than first planned.
+
 **Phase 1: people and import.** Sites and areas settings, labor classes (standalone), roles and site scope, people list, form and
 detail (Overview, Pay, Activity), private and pay hiding, agencies and agency links with submissions, the import center with the People
 stream, PIN slips, badge and PIN reset, the people export. Done when: 30 agency people come in from a file and print PIN slips in under 2
 minutes; a lead DTO walk shows no pay or private field; an agency link submission becomes people after acceptance.
 
-**Phase 2: schedule.** Migration `0001_crew_schedule.sql` (5.3). Templates, the week grid, assignments with overlap and hours warnings,
+**Phase 2: schedule.** Migration `0002_crew_schedule.sql` (5.3). Templates, the week grid, assignments with overlap and hours warnings,
 open slots, copy last week, publish with in app notices and email through `@kitstak/mail` (no SMS in the first release **(choice)**),
 "changed since publish", pickups, swaps and drops with approval, `/me` schedule. Done when: a supervisor builds and publishes a week from
 templates in under 5 minutes for 40 people; a linked person picks up an open shift and a supervisor approves it; notices go once per publish.
 
-**Phase 3: kiosk and clock.** Migration `0002_crew_clock.sql` (5.4 without approvals and exports). Kiosk devices and links, the kiosk
+**Phase 3: kiosk and clock.** Migration `0003_crew_clock.sql` (5.4 without approvals and exports). Kiosk devices and links, the kiosk
 with identify modes, PIN lockout, photos, English and Spanish, the service worker and offline queue with encrypted PINs, the phone clock
 and fence, the time engine (`zone`, `round`, `segments`, `overtime`, `breaks`) with presets and the rules settings, time cards, the today
 board, Home tiles. Done when: every worked example in 4.3 to 4.5 is a passing test; a tablet with the network cut records 20 punches and
 sends each exactly once when it reconnects; a reload while offline still opens the kiosk; the today board matches the punches.
 
-**Phase 4: approve hours and export.** Migration `0003_crew_approvals.sql`. Timesheets, the person week with fixes and the edit audit,
+**Phase 4: approve hours and export.** Migration `0004_crew_approvals.sql`. Timesheets, the person week with fixes and the edit audit,
 `/time/fixes`, approve the week, the lock trigger, reopen, generic payroll exports (by week and by day) with the export log and hash
 check, the punches export. Then the QuickBooks Payroll layout once its format is confirmed (7.1). Done when: an edit keeps the original and
 shows who, when and why; an approved week refuses every write in the domain and in the database; reopen is logged; an exported file's
 totals equal the timesheet to the cent of an hour.
 
-**Phase 5: attendance and time off.** Migration `0004_crew_attendance.sql` (5.5). Day rollover per site, attendance events, excuse and
+**Phase 5: attendance and time off.** Migration `0005_crew_attendance.sql` (5.5). Day rollover per site, attendance events, excuse and
 void, called out from Today and `/me`, time off types, requests, approvals, the balance ledger and its import, time off on the schedule
 and in exports. Done when: the seeded lates, early out and no call no show are found by rollover and not by the seed; approved time off
 removes the event; a balance import and a used request add up.
 
-**Phase 6: skills.** Migration `0005_crew_skills.sql` (5.6). Certification types, person certifications with card copies, skills and
+**Phase 6: skills.** Migration `0006_crew_skills.sql` (5.6). Certification types, person certifications with card copies, skills and
 levels, requirements on areas, templates and shifts, assignment warnings with override reasons, the matrix, Ending soon and the cron
 notices, the certifications and skills imports. Done when: assigning the seeded expired card holder to Receiving shows the warning and
 needs a reason; each card is told once when ending soon and once when expired.
 
-**Phase 7: labor plan.** Migration `0006_crew_plan.sql` (5.7). Plan inputs (typed and imported), typed paces, plan days, the formula in
+**Phase 7: labor plan.** Migration `0007_crew_plan.sql` (5.7). Plan inputs (typed and imported), typed paces, plan days, the formula in
 `src/lib/plan.ts`, the Plan page, the gap beside the schedule, "Fill the gap", snapshots and plan against actual, temp cost from the
 Crew wage when Pulse is absent. Done when: the 4.9 example is a test and shows on the seeded Tuesday; inputs with no pace are listed and
 left out; temp cost shows only to pay readers.

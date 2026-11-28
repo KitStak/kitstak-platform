@@ -158,6 +158,8 @@ export const vendorProfiles = ledgerSchema.table(
     w9OnFile: boolean('w9_on_file').notNull().default(false),
     remitAddress: jsonb('remit_address').$type<Record<string, string>>(),
     notes: text('notes'),
+    /** Kinds of the core vendor that Ledger added (0001). Ledger never drops another app's kind unasked. */
+    ledgerKinds: text('ledger_kinds').array().notNull().default([]),
     ...version(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

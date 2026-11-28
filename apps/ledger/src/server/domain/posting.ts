@@ -72,6 +72,11 @@ export function asDomainError(error: unknown): unknown {
     return new DomainError('CONFLICT', month ? closedMonthMessage(month) : 'That month is closed.');
   }
   if (found?.code === 'KL001') return new DomainError('VALIDATION', 'This entry does not balance, so nothing was saved.');
+  if (found?.code === 'KL005') return new DomainError('CONFLICT', 'Ledger uses this account, so it can be renamed or renumbered but not archived or given another type.');
+  if (found?.code === 'KL006') return new DomainError('CONFLICT', 'This rate is used on invoices, so its rate cannot change. Add a new rate and archive this one.');
+  if (found?.code === 'KL004') return new DomainError('VALIDATION', 'That customer or vendor is not in this workspace.');
+  if (found?.code === '23505') return new DomainError('CONFLICT', 'That name or code is already used. Pick another one.');
+  if (found?.code === '23503') return new DomainError('VALIDATION', 'Something this points at is not in this workspace anymore. Pick it again.');
   if (error instanceof PostingError) return new DomainError('VALIDATION', error.message);
   return error;
 }

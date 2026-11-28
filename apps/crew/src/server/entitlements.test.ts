@@ -54,10 +54,17 @@ describe('every gate goes through orgCrewAccess', () => {
     expect(read('server/page.ts')).toContain('orgCrewAccess(context.org)');
   });
 
-  it('every API route under /api/v1 uses apiRoute (and so the gate)', () => {
-    const routes = files.filter((file) => /[\\/]app[\\/]api[\\/]v1[\\/].*route\.ts$/.test(file));
+  it('every signed in API route under /api/v1 uses apiRoute or csvRoute (and so the gate)', () => {
+    const routes = files.filter((file) => /[\\/]app[\\/]api[\\/]v1[\\/].*route\.ts$/.test(file) && !/[\\/]agency[\\/]/.test(file));
     expect(routes.length).toBeGreaterThan(0);
-    for (const file of routes) expect(fs.readFileSync(file, 'utf8'), file).toContain('apiRoute(');
+    for (const file of routes) expect(fs.readFileSync(file, 'utf8'), file).toMatch(/\b(apiRoute|csvRoute)(<[^>]*>)?\(/);
+    expect(read('server/http/api.ts').match(/assertPlanAllows\(context\.org/g)?.length).toBe(2);
+  });
+
+  it('the public agency link checks the gate of the link workspace (a locked org answers "not active")', () => {
+    expect(read('app/api/v1/agency/[token]/route.ts')).toContain('submitAgencyRows(');
+    expect(read('app/join/a/[token]/page.tsx')).toContain('readPublicLink(');
+    expect(read('server/domain/agency-public.ts')).toContain('orgCrewAccess({ id: row.orgId, slug: row.orgSlug })');
   });
 
   it('every server action file runs through runAction (and so the gate)', () => {

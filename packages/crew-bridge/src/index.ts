@@ -3,7 +3,8 @@
  * Crew for Pulse, Ledger, WMS, Projects and Portal. Raw SQL over the host's Drizzle executor.
  * Reads never throw and answer "not available" (empty, null or role none) when Crew is absent.
  *
- * Phase 0 ships availability, access and onboarding signals. The people, hours, clearances and
+ * Phase 0 shipped availability, access and onboarding signals; Phase 1 adds the people reads
+ * `countBillablePeople` and `getPeopleForWmsUsers`. The hours, clearances and
  * billing reads of 8.1 arrive with the phases that make their tables.
  */
 export { crewAvailability, resetAvailabilityCache, AVAILABILITY_TTL_MS, type BridgeExecutor, type CrewAvailability } from './executor';
@@ -20,5 +21,6 @@ export {
   type RoleInputs,
 } from './access';
 export { getSetupSignals } from './signals';
+export { countBillablePeople, getPeopleForWmsUsers } from './people';
 export { crewUrls, type CrewUrls } from './urls';
 export * from './types';

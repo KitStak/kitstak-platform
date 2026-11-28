@@ -147,6 +147,50 @@ describe.skipIf(!ready)('the ledger books on the database', () => {
     expect(purge).toBeNull();
   });
 
+  it('lets a person be deleted after they posted and acted, blanking only their name', async () => {
+    const ar = await accountId(orgA.orgId, 'ar');
+    const revenue = await accountId(orgA.orgId, 'default_revenue');
+    const leaver = await orgA.member('member', 'Books Leaver');
+    let entryId = '';
+    expect(await ownerTx(async (client) => {
+      entryId = await rawEntry(client, orgA.orgId, [[ar, 500, 0], [revenue, 0, 500]]);
+    })).toBeNull();
+    // Posting sets posted_by at insert; the purge switch is the one way to stamp it afterwards, as here.
+    expect(await ownerTx(async (client) => {
+      await client.query(`select set_config('ledger.allow_purge', 'on', true)`);
+      await client.query('update ledger.journal_entries set posted_by = $2 where id = $1', [entryId, leaver.userId]);
+      await client.query(`insert into ledger.activity (org_id, actor_id, verb, entity_type) values ($1, $2, 'invoice.sent', 'invoice')`, [orgA.orgId, leaver.userId]);
+    })).toBeNull();
+
+    // Anything but blanking the person is still refused.
+    const swap = await ownerTx(async (client) => {
+      await client.query('update ledger.journal_entries set posted_by = $2 where id = $1', [entryId, ownerA.userId]);
+    });
+    expect(swap?.code).toBe('KL002');
+    const blankAndEdit = await ownerTx(async (client) => {
+      await client.query(`update ledger.journal_entries set posted_by = null, memo = 'changed' where id = $1`, [entryId]);
+    });
+    expect(blankAndEdit?.code).toBe('KL002');
+
+    // Deleting the person blanks their name on the entry and the activity row.
+    const remove = await ownerTx(async (client) => {
+      await client.query('delete from core.member where user_id = $1', [leaver.userId]);
+      await client.query('delete from core."user" where id = $1', [leaver.userId]);
+    });
+    expect(remove).toBeNull();
+    const { rows: entry } = await pool.query<{ posted_by: string | null }>('select posted_by from ledger.journal_entries where id = $1', [entryId]);
+    expect(entry[0]?.posted_by).toBeNull();
+    const { rows: acted } = await pool.query<{ n: string }>('select count(*) as n from ledger.activity where org_id = $1 and actor_id is null and verb = $2', [orgA.orgId, 'invoice.sent']);
+    expect(Number(acted[0]?.n)).toBeGreaterThan(0);
+
+    // Leave the org's totals as they were for the tests after this one.
+    expect(await ownerTx(async (client) => {
+      await client.query(`select set_config('ledger.allow_purge', 'on', true)`);
+      await client.query('delete from ledger.journal_lines where entry_id = $1', [entryId]);
+      await client.query('delete from ledger.journal_entries where id = $1', [entryId]);
+    })).toBeNull();
+  });
+
   it('refuses a new entry in a closed month', async () => {
     const ar = await accountId(orgA.orgId, 'ar');
     const revenue = await accountId(orgA.orgId, 'default_revenue');

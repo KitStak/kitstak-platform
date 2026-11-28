@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { PhasePage } from '@/features/phase/phase-page';
+import { NewPersonPage } from '@/features/people/new-person-page';
 
 export const metadata: Metadata = { title: 'Add a person' };
 
 export default function Page() {
-  return <PhasePage id="people-new" path="/people/new" />;
+  return <NewPersonPage />;
 }

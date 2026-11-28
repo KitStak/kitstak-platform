@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
-import { ScreenPage } from '@/features/routes/screen-page';
+import { ImportsPage } from '@/features/imports/import-pages';
 
 export const metadata: Metadata = { title: 'Import and export' };
 
-export default async function Page({ searchParams }: { readonly searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { tab } = await searchParams;
-  return <ScreenPage id="import" path="/import" tab={typeof tab === 'string' ? tab : undefined} />;
+export default function Page() {
+  return <ImportsPage />;
 }

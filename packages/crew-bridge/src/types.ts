@@ -54,3 +54,18 @@ export interface CrewSetupSignals {
   readonly crew_approve: boolean;
   readonly crew_connect: boolean | null;
 }
+
+/**
+ * A Crew person as a sibling app's server work sees them (SPEC 8.1 system reads): names, numbers
+ * and site only. Never pay, private details or attendance.
+ */
+export interface CrewPersonRef {
+  readonly personId: string;
+  readonly number: string;
+  readonly name: string;
+  readonly kind: 'employee' | 'temp' | 'seasonal';
+  readonly status: 'active' | 'on_leave' | 'ended';
+  readonly siteId: string;
+  readonly siteName: string;
+  readonly wmsUserId: string | null;
+}

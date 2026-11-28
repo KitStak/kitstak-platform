@@ -37,3 +37,25 @@ export const isUuid = (value: unknown): value is string => typeof value === 'str
 export function actorUserId(ctx: Pick<DomainContext, 'actorKind' | 'userId'>): string | null {
   return ctx.actorKind === 'user' && isUuid(ctx.userId) ? ctx.userId : null;
 }
+
+interface PgErrorLike {
+  readonly code?: unknown;
+  readonly constraint?: unknown;
+  readonly cause?: unknown;
+}
+
+/** The Postgres error code and constraint of an error (Drizzle wraps the driver error in `cause`). */
+export function pgError(error: unknown): { code: string | null; constraint: string | null } {
+  const raw = error as PgErrorLike | null;
+  const found = (raw && typeof raw.code === 'string' ? raw : (raw?.cause as PgErrorLike | undefined)) ?? raw;
+  return {
+    code: typeof found?.code === 'string' ? found.code : null,
+    constraint: typeof found?.constraint === 'string' ? found.constraint : null,
+  };
+}
+
+/** Trims text and turns an empty string into null, for optional text columns. */
+export function textOrNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed === '' ? null : trimmed;
+}

@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import { RecordPage } from '@/features/routes/record-page';
+import { ImportBatchPage } from '@/features/imports/import-pages';
 
 export const metadata: Metadata = { title: 'Import' };
 
 export default async function Page({ params }: { readonly params: Promise<{ readonly batchId: string }> }) {
   const { batchId } = await params;
-  return <RecordPage kind="import" refValue={batchId} path={`/import/${batchId}`} nav="import" />;
+  return <ImportBatchPage batchId={batchId} />;
 }

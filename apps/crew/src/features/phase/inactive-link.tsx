@@ -4,10 +4,10 @@ import { arrivesIn, type BuildPhase } from '@/lib/pages';
 
 /**
  * A public device or agency link that cannot open (docs/crew/SPEC.md 3.4 and 6.1): no login, no
- * workspace name, nothing about who made it. Phase 0 has no live links yet, so every token lands
- * here; the real kiosk (phase 3) and agency form (phase 1) replace it.
+ * workspace name, nothing about who made it. The agency form (phase 1) shows it for a link that is
+ * revoked, expired, full or from a workspace outside the preview; the kiosk (phase 3) still lands here.
  */
-export function InactiveLink({ what, phase }: { readonly what: string; readonly phase: BuildPhase }) {
+export function InactiveLink({ what, phase }: { readonly what: string; readonly phase?: BuildPhase }) {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-app p-6">
       <div className="w-full max-w-md rounded-2xl border border-border-subtle bg-panel p-8 text-center shadow-sm" data-testid="inactive-link">
@@ -19,7 +19,7 @@ export function InactiveLink({ what, phase }: { readonly what: string; readonly 
           This link is not active.
         </h1>
         <p className="mt-2 text-base text-fg-secondary">Ask the person who sent you this {what} for a new one.</p>
-        <p className="mt-4 text-xs text-fg-muted">{arrivesIn(phase)}</p>
+        {phase ? <p className="mt-4 text-xs text-fg-muted">{arrivesIn(phase)}</p> : null}
       </div>
     </main>
   );

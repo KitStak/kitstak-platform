@@ -22,3 +22,11 @@ default privileges of 0000). `src/server/domain/rls.db.test.ts` fails otherwise.
   read policies on core.organization, core.member, core."user", plus read and write on
   core.vendors (policy `crew_app_own_org`). Does not touch the `core.entitlements` module CHECK.
   `sites.default_template_id` has no FK until 0001 makes `crew.shift_templates`.
+- **0001_crew_user_delete** (Phase 1). `crew.activity_immutable` (KC002) now lets through the one
+  UPDATE that ON DELETE SET NULL makes: `actor_id` going from a person to null with every other
+  column unchanged (the Ledger 0002 fix). Before it, deleting any person who ever did something in
+  Crew failed in every app. Any other change, or blanking plus another change, is still refused.
+  Phase 1 itself needed no new table: 0000 already holds 5.1, 5.2 and 5.8. Because this file took
+  the number 0001, the schedule migration of Phase 2 is `0002_crew_schedule` and each later phase
+  moves up one (clock 0003, approvals 0004, attendance 0005, skills 0006, plan 0007). Append only
+  tables of later phases (punches, punch edits) need the same person column rule in their trigger.

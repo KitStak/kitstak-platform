@@ -89,3 +89,7 @@ export const JOURNAL_SOURCE_TYPES = [
   'payroll',
 ] as const;
 export type JournalSourceType = (typeof JOURNAL_SOURCE_TYPES)[number];
+
+/** Where an account's spending shows in Pulse (`accounts.pulse_cost_category`); null means never sent to Pulse. */
+export const PULSE_COST_CATEGORIES = ['freight', 'packaging', 'equipment', 'outside_service', 'rework', 'supplies', 'storage', 'rent', 'utilities', 'salaried_staff', 'insurance', 'other'] as const;
+export type PulseCostCategoryValue = (typeof PULSE_COST_CATEGORIES)[number];

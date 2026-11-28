@@ -23,4 +23,8 @@ Spec: `docs/ledger/SPEC.md` (source of truth). Stack and layering copy `apps/pul
   Journal, the chart of accounts and reports.
 - **Migrations**: `drizzle/README.md`. **Seed**: `pnpm -F kitstak-ledger db:seed <org-slug>` (step 1, setup, in Phase 0).
 
-Phase status: Phase 0 (scaffold) done. Every route of SPEC 6 renders its gate and empty state; screens fill in by phase (SPEC 13).
+Phase status: Phase 0 (scaffold) and Phase 1 (customers and vendors) done. Phase 1: customers on `core.customers` with
+`ledger.customer_profiles`, vendors on `core.vendors` with `ledger.vendor_profiles` (`ledger_kinds`: never drop a kind another app added
+unasked; archiving a temp agency needs the Crew yes), items, tax rates, terms, the chart of accounts and source mappings with their
+Settings pages, and CSV in and out for the five setup streams (`src/server/csv`, `src/server/domain/setup-csv.ts`, `setup-import.ts`).
+Other routes render their gate and empty state; screens fill in by phase (SPEC 13).

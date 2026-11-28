@@ -91,3 +91,31 @@ export async function readJson(request: Request): Promise<unknown> {
     throw new DomainError('VALIDATION', 'The request body must be valid JSON.');
   }
 }
+
+/** A CSV download for a signed in reader (SPEC 8.8 `GET /api/v1/export/<stream>.csv`): same checks as `apiRoute`, a file instead of JSON. */
+export function csvRoute<P = Record<string, never>>(handler: (args: ApiArgs<P>) => Promise<{ readonly fileName: string; readonly csv: string }>) {
+  return async (request: Request, route: RouteContext<P>): Promise<Response> => {
+    const requestId = request.headers.get('x-vercel-id') ?? crypto.randomUUID();
+    try {
+      const context = await getApiContext(request);
+      if (!context) throw new DomainError('UNAUTHENTICATED', 'Sign in to KitStak to continue.');
+      await assertPlanAllows(context.org, { write: false });
+      const params = route?.params ? await route.params : ({} as P);
+      const ctx = toDomainContext(context);
+      const searchParams = new URL(request.url).searchParams;
+      const file = await withOrg(context.org.id, () => handler({ ctx, context, request, params, searchParams }));
+      const safeName = file.fileName.replace(/[^A-Za-z0-9._-]/g, '_');
+      return new Response(file.csv, {
+        status: 200,
+        headers: {
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': `attachment; filename="${safeName}"`,
+          'cache-control': 'no-store',
+          'x-content-type-options': 'nosniff',
+        },
+      });
+    } catch (error) {
+      return errorResponse(error, requestId);
+    }
+  };
+}

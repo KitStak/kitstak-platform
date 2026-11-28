@@ -55,7 +55,9 @@ export async function createTestOrg(label = 'crew-test'): Promise<TestOrg> {
       return { orgId, orgSlug: slug, userId, userName: name, orgRole, actorKind: 'user' };
     },
     destroy: async () => {
-      // core.vendors cascades from the org; crew.people restricts on vendors, so people go first.
+      // core.vendors cascades from the org; crew.people restricts on vendors, so people go first,
+      // after the agency submissions that point at them.
+      await pool.query('delete from crew.agency_submissions where org_id = $1', [orgId]);
       await pool.query('delete from crew.people where org_id = $1', [orgId]);
       await pool.query('delete from core.organization where id = $1', [orgId]);
       if (userIds.length > 0) await pool.query('delete from core."user" where id = any($1::uuid[])', [userIds]);

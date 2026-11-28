@@ -16,6 +16,7 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { withOrg } from '@/server/db/scope';
 import { ledgerAccessFor } from '@/server/domain/access';
+import { asDomainError } from '@/server/domain/posting';
 import { toDomainContext, type DomainContext } from '@/server/domain/_shared';
 import { assertLedgerOpen } from '@/server/entitlements';
 import { trustedOrigins } from '@/server/env';
@@ -85,7 +86,8 @@ function assertSafeOrigin(request: Request): void {
   }
 }
 
-export function errorResponse(error: unknown, headers: Record<string, string> = {}): NextResponse {
+export function errorResponse(caught: unknown, headers: Record<string, string> = {}): NextResponse {
+  const error = asDomainError(caught);
   if (isDomainError(error)) {
     return NextResponse.json(
       { error: { code: error.code, message: error.message, ...(error.fields ? { fields: error.fields } : {}) } },
@@ -144,6 +146,37 @@ export function apiRoute<P = Record<string, never>, T = unknown>(
       return NextResponse.json(body, { headers: cors });
     } catch (error) {
       return errorResponse(error, cors);
+    }
+  };
+}
+
+/**
+ * A CSV download route: the same session, preview gate and rights checks as `apiRoute`, but the
+ * handler returns a file. Errors still answer with the JSON envelope.
+ */
+export function apiCsvRoute<P = Record<string, never>>(
+  handler: (args: ApiArgs<P>) => Promise<{ readonly fileName: string; readonly csv: string }>,
+  options: ApiOptions = {},
+) {
+  return async (request: Request, route: RouteContext<P>): Promise<NextResponse> => {
+    try {
+      const context = await getApiContext(request);
+      if (!context) throw new DomainError('UNAUTHENTICATED', 'Sign in to KitStak to continue.');
+      assertLedgerOpen(context.org);
+      const params = route?.params ? await route.params : ({} as P);
+      const ctx = toDomainContext(context);
+      const searchParams = new URL(request.url).searchParams;
+      const file = await withOrg(context.org.id, async () => {
+        const access = await ledgerAccessFor(ctx);
+        if (access.role === 'none') throw new DomainError('FORBIDDEN', 'Ask an admin for access to Ledger.');
+        if (options.rights && !options.rights.some((right) => access.rights.includes(right))) {
+          throw new DomainError('FORBIDDEN', "Your Ledger role doesn't include this.");
+        }
+        return handler({ ctx, context, access, request, params, searchParams });
+      });
+      return csvResponse(file.fileName, file.csv);
+    } catch (error) {
+      return errorResponse(error);
     }
   };
 }

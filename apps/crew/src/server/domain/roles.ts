@@ -4,14 +4,14 @@
  * workspace"; if there is no admin, any member is offered it.
  */
 import 'server-only';
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { member, user } from '@kitstak/db/schema';
 import { resolveRole, type CrewAccess } from '@kitstak/crew-bridge';
 import { db, type Executor } from '@/server/db';
 import { scoped } from '@/server/db/scope';
-import { memberRoles } from '@/server/db/schema';
-import { forbidden } from '@/server/errors';
-import { parseOrgRole, type OrgRole } from '@/lib/permissions';
+import { memberRoles, sites } from '@/server/db/schema';
+import { forbidden, invalid, notFound } from '@/server/errors';
+import { assignableRoles, canCrew, isCrewRole, parseOrgRole, type CrewRole, type OrgRole } from '@/lib/permissions';
 import { inTx, type DomainContext } from './_shared';
 import { logActivity } from './activity';
 import { ensureSetup, loadSettings } from './settings';
@@ -84,4 +84,53 @@ export const claimCrewOwnership = scoped(async function claimCrewOwnership(ctx: 
     const after = (await listMemberAccess(ctx, tx)).find((entry) => entry.userId === ctx.userId)!;
     return after.access;
   });
+});
+
+export interface SetRoleInput {
+  readonly userId: string;
+  readonly role: CrewRole;
+  /** Only for supervisor and lead. Null or empty means all sites. */
+  readonly siteIds?: readonly string[] | null;
+}
+
+/**
+ * People and roles (SPEC 3.1, 6.1 Settings): an explicit Crew role for one member. Needs
+ * `roles:manage`. Only an owner makes or removes an owner, and the last owner stays.
+ */
+export const setMemberRole = scoped(async function setMemberRole(ctx: DomainContext, input: SetRoleInput): Promise<CrewAccess> {
+  return inTx(async (tx) => {
+    const members = await listMemberAccess(ctx, tx);
+    const me = members.find((entry) => entry.userId === ctx.userId);
+    const actorRole = ctx.actorKind === 'user' ? (me?.access.role ?? 'none') : 'owner';
+    if (!canCrew(actorRole, 'roles:manage')) throw forbidden('Your Crew role cannot change roles.');
+    if (!isCrewRole(input.role)) throw invalid('Pick a role.', { role: 'Pick a role.' });
+    if (!assignableRoles(actorRole).includes(input.role)) throw forbidden('Only an owner can make someone an owner.');
+    const target = members.find((entry) => entry.userId === input.userId);
+    if (!target) throw notFound('That member');
+    if (target.access.role === 'owner' && actorRole !== 'owner') throw forbidden('Only an owner can change the role of an owner.');
+    if (target.access.role === 'owner' && input.role !== 'owner' && members.filter((entry) => entry.access.role === 'owner').length <= 1) {
+      throw forbidden('Crew needs at least one owner. Make someone else the owner first.');
+    }
+    const scopedRole = input.role === 'supervisor' || input.role === 'lead';
+    const siteIds = scopedRole && input.siteIds && input.siteIds.length > 0 ? [...new Set(input.siteIds)] : null;
+    if (siteIds) {
+      const found = await tx.select({ id: sites.id }).from(sites).where(and(eq(sites.orgId, ctx.orgId), inArray(sites.id, siteIds), isNull(sites.deletedAt)));
+      if (found.length !== siteIds.length) throw invalid('One of those sites is not open.', { siteIds: 'Pick open sites.' });
+    }
+    await tx
+      .insert(memberRoles)
+      .values({ orgId: ctx.orgId, userId: input.userId, role: input.role, siteIds, updatedBy: ctx.userId })
+      .onConflictDoUpdate({ target: [memberRoles.orgId, memberRoles.userId], set: { role: input.role, siteIds, updatedBy: ctx.userId, updatedAt: new Date() } });
+    await logActivity(tx, ctx, { verb: 'role.changed', entityType: 'member_role', entityId: input.userId, before: { role: target.access.role, siteIds: target.access.siteIds }, after: { role: input.role, siteIds } });
+    const after = (await listMemberAccess(ctx, tx)).find((entry) => entry.userId === input.userId)!;
+    return after.access;
+  });
+});
+
+/** Members with their Crew access, for People and roles. Needs `roles:manage`. */
+export const listRoles = scoped(async function listRoles(ctx: DomainContext): Promise<OrgMember[]> {
+  const members = await listMemberAccess(ctx);
+  const me = members.find((entry) => entry.userId === ctx.userId);
+  if (!canCrew(me?.access.role ?? 'none', 'roles:manage')) throw forbidden('Your Crew role cannot change roles.');
+  return members;
 });

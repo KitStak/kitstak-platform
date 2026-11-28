@@ -94,9 +94,9 @@ function StepRow({ step, pulseUrl }: { readonly step: SetupStepState; readonly p
 export function WelcomeView({ orgName, role, state, canSetUp, steps }: { readonly orgName: string; readonly role: CrewRole; readonly state: RunCrewState; readonly canSetUp: boolean; readonly steps: readonly SetupStepState[] }) {
   const { appUrls } = useShell();
   const starts = [
-    { icon: Sparkles, title: 'Try it with sample data', detail: 'One site, 10 people and 2 weeks, removed in one click.' },
-    { icon: FileSpreadsheet, title: 'Import your people', detail: 'From your agency or payroll, with a template for the columns.' },
-    { icon: UserPlus, title: 'Type the first people', detail: 'A short form per person. Crew makes numbers for temps.' },
+    { icon: Sparkles, title: 'Try it with sample data', detail: 'One site, 10 people and 2 weeks, removed in one click.', href: null, note: arrivesIn(2) },
+    { icon: FileSpreadsheet, title: 'Import your people', detail: 'From your agency or payroll, with a template for the columns.', href: '/import', note: null },
+    { icon: UserPlus, title: 'Type the first people', detail: 'A short form per person. Crew makes numbers for temps.', href: '/people/new', note: null },
   ];
   return (
     <div className="flex flex-col gap-4">
@@ -107,7 +107,7 @@ export function WelcomeView({ orgName, role, state, canSetUp, steps }: { readonl
             <div className="flex items-start gap-3">
               <KeyRound aria-hidden className="mt-0.5 size-5 shrink-0 text-icon" />
               <p className="text-base text-fg-secondary">
-                Owners, admins and people with the Payroll role see pay types, wages and payroll files. Supervisors and leads never do: the server leaves those fields out. You give someone the Payroll role under Settings, People and roles. {arrivesIn(1)}.
+                Owners, admins and people with the Payroll role see pay types, wages and payroll files. Supervisors and leads never do: the server leaves those fields out. You give someone the Payroll role under Settings, People and roles.
               </p>
             </div>
           </Panel>
@@ -118,7 +118,13 @@ export function WelcomeView({ orgName, role, state, canSetUp, steps }: { readonl
                   <start.icon aria-hidden className="size-5 text-icon" />
                   <span className="text-sm font-medium text-fg">{start.title}</span>
                   <span className="text-sm text-fg-muted">{start.detail}</span>
-                  <span className="text-xs text-fg-muted">{arrivesIn(1)}</span>
+                  {start.href ? (
+                    <Link href={start.href} className="text-sm font-medium text-fg-link hover:underline">
+                      Start here
+                    </Link>
+                  ) : (
+                    <span className="text-xs text-fg-muted">{start.note}</span>
+                  )}
                 </li>
               ))}
             </ul>

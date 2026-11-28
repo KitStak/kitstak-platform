@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NAV } from './nav';
-import { arrivesIn, CREW_PAGES, PHASE_NAMES } from './pages';
+import { arrivesIn, BUILT_PHASE, CREW_PAGES, PHASE_NAMES } from './pages';
 
 const APP = path.resolve(__dirname, '../app');
 
@@ -63,7 +63,7 @@ describe('every route of SPEC 6.1 exists', () => {
   });
 
   it('every page under (app) that is not built yet renders its teaching state through PhasePage', () => {
-    for (const page of CREW_PAGES) {
+    for (const page of CREW_PAGES.filter((entry) => entry.phase > BUILT_PHASE)) {
       const folder = SPEC_ROUTES.find(([route]) => route === page.path)![1];
       const source = fs.readFileSync(path.join(APP, folder, 'page.tsx'), 'utf8');
       expect(source, page.path).toContain(`<PhasePage id="${page.id}"`);
@@ -73,6 +73,15 @@ describe('every route of SPEC 6.1 exists', () => {
   it('every navigation entry opens a route in the list', () => {
     const routes = new Set(SPEC_ROUTES.map(([route]) => route));
     for (const entry of NAV) expect(routes.has(entry.href), entry.href).toBe(true);
+  });
+
+  it('a page of a built phase renders its real screen, not the teaching state', () => {
+    const built = CREW_PAGES.filter((entry) => entry.phase <= BUILT_PHASE && !entry.path.startsWith('/join'));
+    expect(built.map((page) => page.id).sort()).toEqual(['agencies', 'agency', 'export', 'import', 'import-batch', 'people', 'people-new', 'person', 'settings']);
+    for (const page of built) {
+      const folder = SPEC_ROUTES.find(([route]) => route === page.path)![1];
+      expect(fs.readFileSync(path.join(APP, folder, 'page.tsx'), 'utf8'), page.path).not.toContain('<PhasePage');
+    }
   });
 
   it('says which phase a page arrives in', () => {

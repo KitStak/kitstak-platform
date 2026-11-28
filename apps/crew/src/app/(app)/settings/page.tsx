@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { PhasePage } from '@/features/phase/phase-page';
+import { SettingsPage } from '@/features/settings/settings-page';
 
 export const metadata: Metadata = { title: 'Settings' };
 
 export default function Page() {
-  return <PhasePage id="settings" path="/settings" />;
+  return <SettingsPage />;
 }
