@@ -23,3 +23,4 @@ export * from './core/links';
 export * from './core/wms-profiles';
 export * from './core/wms-tenants';
 export * from './core/record-links';
+export * from './core/vendors';

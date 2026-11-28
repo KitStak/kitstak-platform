@@ -1,0 +1,8 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    { "idx": 0, "version": "7", "when": 1796256000000, "tag": "0000_crew_init", "breakpoints": true },
+    { "idx": 1, "version": "7", "when": 1796342400000, "tag": "0001_crew_user_delete", "breakpoints": true }
+  ]
+}

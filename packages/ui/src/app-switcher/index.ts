@@ -3,6 +3,7 @@ export {
   AppSwitcher,
   appSwitcherRow,
   type AppSwitcherAppId,
+  type AppSwitcherBilledAppId,
   type AppSwitcherEntitled,
   type AppSwitcherProps,
   type AppSwitcherRowState,

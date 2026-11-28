@@ -1,7 +1,7 @@
 'use client';
 /**
  * Shared cross-app launcher menu (BLUEPRINT.md §6): a module-grid trigger in each app's top bar
- * opening a popover that lists Portal / CRM / WMS / Projects / Pulse. Purely presentational: origins and
+ * opening a popover that lists Portal / CRM / WMS / Projects / Pulse / Crew / Ledger. Purely presentational: origins and
  * entitlement flags arrive as props (no data fetching here), and styling uses tokens.css custom
  * properties exclusively so the menu inherits the host app's light/dark theme. Keyboard and
  * focus behavior (aria-haspopup/expanded, Escape, focus return) come from the Radix popover.
@@ -16,7 +16,19 @@ import './app-switcher.css';
 /** Icon box in a row. The supplied artwork carries its own padding, so it fills the tile. */
 const MARK_SIZE = 32;
 
-export type AppSwitcherAppId = 'portal' | 'crm' | 'wms' | 'projects' | 'pulse';
+/** The apps a plan can hold. Plan badges and "add to plan" links exist only for these. */
+export type AppSwitcherBilledAppId = 'portal' | 'crm' | 'wms' | 'projects' | 'pulse';
+/**
+ * Every app the switcher can list. Crew and Ledger are in preview (not sold yet): they have no plan
+ * badge and no "add to plan" link. At launch they move into AppSwitcherBilledAppId.
+ */
+export type AppSwitcherAppId = AppSwitcherBilledAppId | 'crew' | 'ledger';
+
+const BILLED_APP_IDS: readonly AppSwitcherAppId[] = ['portal', 'crm', 'wms', 'projects', 'pulse'];
+
+function isBilledApp(id: AppSwitcherAppId): id is AppSwitcherBilledAppId {
+  return BILLED_APP_IDS.includes(id);
+}
 
 export interface AppSwitcherUrls {
   readonly portal: string;
@@ -26,6 +38,12 @@ export interface AppSwitcherUrls {
   readonly projects?: string;
   /** KitStak Pulse origin. Omitted → the Pulse row is hidden (app not deployed for this host). */
   readonly pulse?: string;
+  /**
+   * KitStak Crew and KitStak Ledger origins. Omitted → their rows are hidden. Before launch a host
+   * passes them only for an org the preview gate lets in (`previewAccess` in @kitstak/entitlements).
+   */
+  readonly crew?: string;
+  readonly ledger?: string;
 }
 
 /**
@@ -37,6 +55,8 @@ export interface AppSwitcherEntitled {
   readonly wms: boolean;
   readonly projects?: boolean;
   readonly pulse?: boolean;
+  readonly crew?: boolean;
+  readonly ledger?: boolean;
 }
 
 export interface AppSwitcherProps {
@@ -54,9 +74,9 @@ export interface AppSwitcherProps {
    * row into a link to the plan picker with that app turned on. Apps with no badge keep the
    * `entitled` and `notInPlan` behavior, so old callers work unchanged.
    */
-  readonly planBadges?: Partial<Record<AppSwitcherAppId, AppSwitcherPlanBadge>>;
+  readonly planBadges?: Partial<Record<AppSwitcherBilledAppId, AppSwitcherPlanBadge>>;
   /** Link for a row that is not in the plan. Default `${urls.portal}/billing/plan?add=<app>`. */
-  readonly addHref?: (app: AppSwitcherAppId) => string;
+  readonly addHref?: (app: AppSwitcherBilledAppId) => string;
   /**
    * True for a person who only manages billing (the bookkeeper). They have no seat in any app, so
    * the app rows are plain text that says so, not links to a screen they cannot open. The Portal
@@ -90,13 +110,14 @@ export function appSwitcherRow(
   const portal = props.urls.portal.replace(/\/+$/, '');
   const own = props.urls[app.id] ?? '/';
   const isCurrent = app.id === props.current;
-  const badge = app.id === 'portal' ? null : (props.planBadges?.[app.id] ?? null);
+  const billedId = isBilledApp(app.id) && app.id !== 'portal' ? app.id : null;
+  const badge = billedId === null ? null : (props.planBadges?.[billedId] ?? null);
 
-  if (badge !== null) {
+  if (badge !== null && billedId !== null) {
     if (badge === 'not_in_plan' && !isCurrent) {
       return {
         locked: true,
-        href: props.addHref ? props.addHref(app.id) : `${portal}/billing/plan?add=${app.id}`,
+        href: props.addHref ? props.addHref(billedId) : `${portal}/billing/plan?add=${billedId}`,
         badge,
         lockedLabel: null,
         handoffTitle: 'Opening your plan',
@@ -130,6 +151,8 @@ const APPS: readonly AppMeta[] = [
   { id: 'wms', name: 'KitStak WMS', descriptor: 'Receiving, inventory and shipping' },
   { id: 'projects', name: 'KitStak Projects', descriptor: 'Projects, programs and tasks' },
   { id: 'pulse', name: 'KitStak Pulse', descriptor: 'Profit by job, client and service' },
+  { id: 'crew', name: 'KitStak Crew', descriptor: 'People, shifts and the time clock' },
+  { id: 'ledger', name: 'KitStak Ledger', descriptor: 'Invoices, bills and month-end close' },
 ];
 
 function GridIcon() {

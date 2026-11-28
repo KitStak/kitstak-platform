@@ -14,6 +14,8 @@
     "dev:portal": "turbo dev --filter=kitstak-portal",
     "dev:projects": "turbo dev --filter=kitstak-projects",
     "dev:pulse": "turbo dev --filter=kitstak-pulse",
+    "dev:crew": "turbo dev --filter=kitstak-crew",
+    "dev:ledger": "turbo dev --filter=kitstak-ledger",
     "dev:web": "turbo dev --filter=kitstak-web",
     "build": "turbo build",
     "lint": "turbo lint",

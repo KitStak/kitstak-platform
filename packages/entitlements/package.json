@@ -9,7 +9,8 @@
     "./read": "./src/read.ts",
     "./grant": "./src/grant.ts",
     "./write": "./src/write.ts",
-    "./dev": "./src/dev.ts"
+    "./dev": "./src/dev.ts",
+    "./preview": "./src/preview.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

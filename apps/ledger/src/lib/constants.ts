@@ -1,0 +1,28 @@
+/** Label colors for pills and tags (the shared palette of the UI kit). */
+export const LABEL_COLORS = [
+  'green',
+  'orange',
+  'red',
+  'gray',
+  'blue',
+  'dark-blue',
+  'purple',
+  'pink',
+  'teal',
+  'yellow',
+  'lime',
+  'brown',
+  'sky',
+  'berry',
+  'indigo',
+  'peach',
+  'green-light',
+  'orange-light',
+  'red-light',
+  'blue-light',
+  'purple-light',
+  'pink-light',
+  'teal-light',
+  'yellow-light',
+] as const;
+export type LabelColor = (typeof LABEL_COLORS)[number];
