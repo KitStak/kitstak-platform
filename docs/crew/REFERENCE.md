@@ -147,3 +147,32 @@ and a "Tell me when it's ready" contact topic. The planned price is $4 per perso
 `packages/billing/src/catalog.ts`, which is outside `PRODUCT_IDS`, so sign-up, the calculator, Stripe and entitlements never see it.
 Site docs are in `apps/web/content/docs/crew/`, written as planned. When the app ships: move its price into `CATALOG.products`, swap
 the placeholders for real screenshots, and rewrite the docs against the real screens.
+
+## 11. Go-live on kitstak.com
+
+The website is ready to sell Crew the moment two things are done. Everything else (product page,
+menus, footer, pricing card, calculator, wizard, sign-up links, search data, llms.txt) already
+follows one switch: `CREW_IS_LIVE` in `apps/web/src/components/site-links.ts`, set to `false`.
+
+**Blocker 1: billing in the portal.**
+
+- Move Crew from `PLANNED_PRODUCTS` into `PRODUCT_IDS` and `CATALOG.products` in
+  `packages/billing/src/catalog.ts`. The price is $4 per person each month, with the same four columns.
+- Add the module key `crew` to `packages/entitlements/src/modules.ts` and the
+  `core.entitlements.module` CHECK constraint in `@kitstak/db` (a migration).
+- Create the Stripe prices: `pnpm -F @kitstak/billing stripe:setup check` lists what Stripe needs.
+- Portal sign-up and the app picker read `PRODUCT_IDS`, so they pick Crew up from the catalog. Check
+  the portal typecheck for any per-product table that needs a Crew row.
+- The app itself must exist at `crew.kitstak.app` (`NEXT_PUBLIC_CREW_URL`, local port 3800).
+
+**Blocker 2: screenshots.**
+
+- Fill every slot in `apps/web/src/components/crew/crew-shots.ts`: `file`
+  (`/crew/shots/<slot>.webp` under `apps/web/public`), `width`, `height` and `alt`.
+- Capture real screens of the running app with demo data, light theme, 1440 wide at 2x, cropped and
+  compressed to WebP under 200 KB. Each placeholder turns into the picture on its own.
+
+**Then flip it.** Set `CREW_IS_LIVE = true`. `apps/web/src/lib/go-live.test.ts` fails if either blocker
+is not done, and its "two blockers today" test must be updated to the new state. Rewrite the site
+docs in `apps/web/content/docs/crew/` against the real screens and drop the planned note.
+

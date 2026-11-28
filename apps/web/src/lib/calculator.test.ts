@@ -61,6 +61,8 @@ describe('app origins', () => {
       wms: 'https://wms.kitstak.app',
       projects: 'https://projects.kitstak.app',
       pulse: 'https://pulse.kitstak.app',
+      crew: 'https://crew.kitstak.app',
+      ledger: 'https://ledger.kitstak.app',
     });
     // Tests run like a production build: no variable set, not `next dev`.
     expect(LINKS.portal).toBe('https://kitstak.app');
@@ -85,6 +87,8 @@ describe('app origins', () => {
       wms: 'http://localhost:3000',
       projects: 'http://localhost:3400',
       pulse: 'http://localhost:3500',
+      crew: 'http://localhost:3800',
+      ledger: 'http://localhost:3700',
     });
     expect(resolveAppOrigins({ portal: 'https://kitstak.app' }, LOCAL_DEV_ORIGINS).portal).toBe(
       'https://kitstak.app',

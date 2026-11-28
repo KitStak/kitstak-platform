@@ -1,5 +1,5 @@
 import { priceOf } from '@/lib/pricing';
-import { CONTACT, NOTIFY_LABEL, isAppLive, isPlannedProductId, isProductId } from '../site-links';
+import { CONTACT, NOTIFY_LABEL, comingSoonSentence, isAppLive, isPlannedProductId, isProductId } from '../site-links';
 import type { SiteProductId } from '../site-links';
 
 export const TOPICS = [
@@ -41,7 +41,7 @@ export const TOPICS = [
   {
     id: 'notify',
     label: NOTIFY_LABEL,
-    note: 'KitStak Crew and KitStak Ledger are coming soon. We will email you once when you can start.',
+    note: `${comingSoonSentence().trim() || 'New apps are on the way.'} We will email you once when you can start.`,
     prompt: 'Which app are you waiting for, and what do you use for it today?',
     action: 'Ask to be told',
     subject: "Tell me when it's ready",

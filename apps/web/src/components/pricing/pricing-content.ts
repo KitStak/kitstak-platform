@@ -4,6 +4,7 @@
  * Copy rules: plain words, short sentences, 20 words at most.
  */
 import type { FaqItem } from '@/components/product/cta';
+import { COMING_SOON_APPS, announcedName, comingSoonNames } from '@/components/site-links';
 import {
   BILLING_POLICY,
   BUNDLE_OFF,
@@ -26,8 +27,7 @@ export const HERO = {
 export const CARDS_NOTE = `Use two or more apps and save ${BUNDLE_OFF} on every one.`;
 
 /** Above the Crew and Ledger cards. */
-export const PLANNED_LEAD =
-  'Crew and Ledger have prices but no app yet. They are not in the calculator. When they open, they count toward the bundle like every other app.';
+export const PLANNED_LEAD = `${comingSoonNames()} ${COMING_SOON_APPS.length === 1 ? 'has a price' : 'have prices'} but no app yet. Not in the calculator. When an app opens, it counts toward the bundle.`;
 
 export const CALCULATOR = {
   title: 'Price your plan.',
@@ -115,10 +115,10 @@ export const PRICING_FAQ: readonly FaqItem[] = [
     question: 'How many people can use Pulse?',
     answer: `${includedSeatsLabel('pulse')}. That is ${pulseSeats} people for one flat price. For a bigger team, talk to us.`,
   },
-  {
-    question: 'When can I buy Crew or Ledger?',
-    answer: `Not yet. Crew is planned at ${priceInWords('crew')}. Ledger is planned at ${priceInWords('ledger')}, ${includedSeatsLabel('ledger')?.toLowerCase()}. Ask to be told when they open.`,
-  },
+  ...COMING_SOON_APPS.map((id) => ({
+    question: `When can I buy ${announcedName(id)}?`,
+    answer: `Not yet. It is planned at ${priceInWords(id)}${includedSeatsLabel(id) ? `, ${includedSeatsLabel(id)?.toLowerCase()}` : ''}. Ask to be told when it opens.`,
+  })),
   {
     question: 'Is sales tax included?',
     answer: 'No. If sales tax applies to you, it is added at checkout and shown as its own line.',

@@ -19,6 +19,9 @@ export interface AppOrigins {
   readonly wms: string;
   readonly projects: string;
   readonly pulse: string;
+  /** Crew and Ledger have no app yet. Their origins are the planned ones (docs/<app>/REFERENCE.md section 6). */
+  readonly crew: string;
+  readonly ledger: string;
 }
 
 /** Production app origins (from the platform's custom-domain configuration, docs/DEPLOYMENT.md). */
@@ -28,6 +31,8 @@ export const PRODUCTION_ORIGINS: AppOrigins = {
   wms: 'https://wms.kitstak.app',
   projects: 'https://projects.kitstak.app',
   pulse: 'https://pulse.kitstak.app',
+  crew: 'https://crew.kitstak.app',
+  ledger: 'https://ledger.kitstak.app',
 };
 
 /** The local dev ports from docs/billing/DEV.md. Used only by `next dev`, and only when no variable is set. */
@@ -37,6 +42,8 @@ export const LOCAL_DEV_ORIGINS: AppOrigins = {
   wms: 'http://localhost:3000',
   projects: 'http://localhost:3400',
   pulse: 'http://localhost:3500',
+  crew: 'http://localhost:3800',
+  ledger: 'http://localhost:3700',
 };
 
 /** An origin from an env value: trimmed, no trailing slash. Blank or not a web address gives null. */
@@ -59,6 +66,8 @@ export function resolveAppOrigins(env: OriginEnv, fallback: AppOrigins = PRODUCT
     wms: cleanOrigin(env.wms) ?? fallback.wms,
     projects: cleanOrigin(env.projects) ?? fallback.projects,
     pulse: cleanOrigin(env.pulse) ?? fallback.pulse,
+    crew: cleanOrigin(env.crew) ?? fallback.crew,
+    ledger: cleanOrigin(env.ledger) ?? fallback.ledger,
   };
 }
 
@@ -75,6 +84,8 @@ export const LINKS: AppOrigins = resolveAppOrigins(
     wms: process.env.NEXT_PUBLIC_WMS_URL,
     projects: process.env.NEXT_PUBLIC_PROJECTS_URL,
     pulse: process.env.NEXT_PUBLIC_PULSE_URL,
+    crew: process.env.NEXT_PUBLIC_CREW_URL,
+    ledger: process.env.NEXT_PUBLIC_LEDGER_URL,
   },
   process.env.NODE_ENV === 'development' ? LOCAL_DEV_ORIGINS : PRODUCTION_ORIGINS,
 );
@@ -89,6 +100,39 @@ export const LINKS: AppOrigins = resolveAppOrigins(
 export const PULSE_IS_LIVE: boolean = true;
 
 /**
+ * The go-live switches for Crew and Ledger. Both stay false until the two blockers in
+ * docs/crew/REFERENCE.md and docs/ledger/REFERENCE.md section 11 are done:
+ *  1. Billing: the app is sellable through portal sign-up. Its price moves from PLANNED_PRODUCTS into
+ *     CATALOG.products (so it is a `ProductId`), with Stripe prices and an entitlements module.
+ *  2. Screenshots: every slot in components/crew/crew-shots.ts (or ledger-shots.ts) has a real file.
+ * Flip one to true and its page, menus, pricing card, footer and start buttons switch from "Tell me
+ * when it's ready" to "Start with ...". src/lib/go-live.test.ts fails if a switch is on before both
+ * blockers are done, so it cannot go out early by mistake.
+ */
+export const CREW_IS_LIVE: boolean = false;
+export const LEDGER_IS_LIVE: boolean = false;
+
+/** The apps announced on the site before they can be bought. They keep these ids for life. */
+export const ANNOUNCED_APP_IDS = ['crew', 'ledger'] as const;
+export type AnnouncedAppId = (typeof ANNOUNCED_APP_IDS)[number];
+
+export function isAnnouncedApp(value: string): value is AnnouncedAppId {
+  return (ANNOUNCED_APP_IDS as readonly string[]).includes(value);
+}
+
+/** The switch for each app that has one. An app with no switch is open. */
+const LIVE_SWITCH: Readonly<Record<'pulse' | AnnouncedAppId, boolean>> = {
+  pulse: PULSE_IS_LIVE,
+  crew: CREW_IS_LIVE,
+  ledger: LEDGER_IS_LIVE,
+};
+
+/** The switch as set, whatever billing says. The go-live test compares it with billing. */
+export function liveSwitch(product: 'pulse' | AnnouncedAppId): boolean {
+  return LIVE_SWITCH[product];
+}
+
+/**
  * Every app the site has a page for: the four you can buy, then Crew and Ledger, which are announced
  * with a price but have no app yet (docs/crew/REFERENCE.md, docs/ledger/REFERENCE.md). A planned app
  * never rides along in a start, sign-up or calculator link: those take `ProductId` only.
@@ -98,10 +142,40 @@ export { PLANNED_PRODUCT_IDS, isPlannedProductId };
 export type { PlannedProductId };
 export const SITE_PRODUCT_IDS: readonly SiteProductId[] = [...PRODUCT_IDS, ...PLANNED_PRODUCT_IDS];
 
-/** False for a product whose app customers cannot open yet. Such a product gets no start button. */
+/**
+ * False for a product whose app customers cannot open yet. Such a product gets no start button.
+ * An app billing cannot sell yet (still in PLANNED_PRODUCTS) is never live, even with its switch on.
+ */
 export function isAppLive(product: SiteProductId): boolean {
   if (isPlannedProductId(product)) return false;
-  return product !== 'pulse' || PULSE_IS_LIVE;
+  return product === 'pulse' || isAnnouncedApp(product) ? LIVE_SWITCH[product] : true;
+}
+
+/** Crew and Ledger while their go-live switch is off. Empty once both are live. */
+export const COMING_SOON_APPS: readonly AnnouncedAppId[] = ANNOUNCED_APP_IDS.filter((id) => !isAppLive(id));
+
+const ANNOUNCED_SHORT_NAME: Readonly<Record<AnnouncedAppId, string>> = { crew: 'Crew', ledger: 'Ledger' };
+
+/** "Crew", "Ledger": the short name for sentences. */
+export function announcedName(id: AnnouncedAppId): string {
+  return ANNOUNCED_SHORT_NAME[id];
+}
+
+function joinNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+/** "Crew and Ledger", "Ledger", or '' once both are live. For sentences about what is coming. */
+export function comingSoonNames(apps: readonly AnnouncedAppId[] = COMING_SOON_APPS): string {
+  return joinNames(apps.map(announcedName));
+}
+
+/** " Crew and Ledger are coming soon." with a leading space, "" when nothing is. `extra` goes first. */
+export function comingSoonSentence(extra: readonly string[] = []): string {
+  const names = [...extra, ...COMING_SOON_APPS.map(announcedName)];
+  if (names.length === 0) return '';
+  return ` ${joinNames(names)} ${names.length === 1 ? 'is' : 'are'} coming soon.`;
 }
 
 /** The one wording for a product that is not available yet. */
@@ -157,8 +231,8 @@ export const PRODUCT_ROUTE: Readonly<Record<SiteProductId, string>> = {
 /** The label on every button for an app that is announced but not open yet. */
 export const NOTIFY_LABEL = "Tell me when it's ready";
 
-/** The contact form, set to "Tell me when it's ready" and naming the planned app. */
-export function notifyHref(product: PlannedProductId): string {
+/** The contact form, set to "Tell me when it's ready" and naming the announced app. */
+export function notifyHref(product: AnnouncedAppId): string {
   return `${ROUTES.notify}&product=${product}`;
 }
 
@@ -172,11 +246,13 @@ export type { ProductId, Stack };
 export const FULL_STACK: Stack = PRODUCT_IDS;
 
 /** How each product reads after "Start with": "Start with the CRM", "Start with Pulse". */
-export const START_NAME: Readonly<Record<ProductId, string>> = {
+export const START_NAME: Readonly<Record<SiteProductId, string>> = {
   crm: 'the CRM',
   wms: 'the WMS',
   projects: 'Projects',
   pulse: 'Pulse',
+  crew: 'Crew',
+  ledger: 'Ledger',
 };
 
 /** The products in `stack` a visitor can start on today. Leaves out any whose app is not open yet. */
@@ -249,9 +325,11 @@ export interface StartLink {
 
 /**
  * The start button for one product: "Start with ..." when its app is open, a walkthrough when it is
- * not, and "Tell me when it's ready" for a planned app, which has nothing to walk through yet.
+ * not, and "Tell me when it's ready" for Crew or Ledger before launch, which have nothing to walk
+ * through yet.
  */
 export function startLink(product: SiteProductId): StartLink {
+  if (isAnnouncedApp(product) && !isAppLive(product)) return { href: notifyHref(product), label: NOTIFY_LABEL };
   if (isPlannedProductId(product)) return { href: notifyHref(product), label: NOTIFY_LABEL };
   return isAppLive(product)
     ? { href: startFreeHref(product, 'product'), label: `Start with ${START_NAME[product]}` }

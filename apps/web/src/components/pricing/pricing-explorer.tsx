@@ -21,6 +21,7 @@ import {
   PLANNED_PRODUCT_IDS,
   PRODUCT_IDS,
   PRODUCT_ROUTE,
+  availabilityLabel,
   isAppLive,
   startLink,
   START_LABEL,
@@ -50,11 +51,13 @@ function PriceCard({ product, interval }: PriceCardProps) {
   const seats = includedSeatsLabel(product);
   const isOpen = isAppLive(product);
   const walkthrough = startLink(product);
+  const availability = availabilityLabel(product);
   return (
-    <article className={styles.card} data-product={product} data-testid={`price-card-${product}`}>
+    <article className={styles.card} data-product={product} data-planned={availability ? true : undefined} data-testid={`price-card-${product}`}>
       <header className={styles.cardHead}>
         <AppIcon app={product} size={44} />
         <h3 className={styles.cardName}>{price.name}</h3>
+        {availability ? <span className={styles.cardSoon}>{availability}</span> : null}
       </header>
       <p className={styles.cardLine}>{price.tagline}</p>
       <p className={styles.cardPrice}>
@@ -169,7 +172,9 @@ export function PricingExplorer() {
         </div>
       </section>
 
-      {/* Planned apps: shown with their price, never in the calculator or a sign-up link. */}
+      {/* Planned apps: shown with their price, never in the calculator or a sign-up link. Gone once
+          billing can sell both; an app billing sells whose switch is off shows in the grid above. */}
+      {PLANNED_PRODUCT_IDS.length > 0 ? (
       <section id="coming-soon" className={styles.plannedBand} aria-labelledby="coming-soon-heading">
         <div className="container">
           <h2 id="coming-soon-heading" className={styles.plannedTitle}>
@@ -183,6 +188,7 @@ export function PricingExplorer() {
           </div>
         </div>
       </section>
+      ) : null}
 
       <section id="calculator" className={`section ${styles.calcBand}`} aria-labelledby="calculator-heading">
         <div className="container">

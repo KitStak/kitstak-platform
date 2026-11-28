@@ -5,9 +5,10 @@
  *
  * Validate a page with https://search.google.com/test/rich-results after a change.
  */
-import type { PlannedProductId, ProductId } from '@/lib/pricing';
+
 import { CATALOG, TRIAL_DAYS, priceOf } from '@/lib/pricing';
-import { CONTACT } from '@/components/site-links';
+import { CONTACT, isAppLive, isProductId } from '@/components/site-links';
+import type { SiteProductId } from '@/components/site-links';
 
 /** The one public address of the marketing site. No trailing slash. */
 export const SITE_URL = 'https://kitstak.com';
@@ -77,7 +78,7 @@ interface AppFacts {
 }
 
 /** What each app is, for search. The words match the product pages. */
-const APP_FACTS: Readonly<Record<ProductId, AppFacts>> = {
+const APP_FACTS: Readonly<Record<SiteProductId, AppFacts>> = {
   crm: {
     name: 'KitStak CRM',
     path: '/crm',
@@ -104,11 +105,41 @@ const APP_FACTS: Readonly<Record<ProductId, AppFacts>> = {
     category: 'BusinessApplication',
     description: 'Profit by job, client and extra service, so you know which jobs make money.',
   },
+  crew: {
+    name: 'KitStak Crew',
+    path: '/crew',
+    category: 'BusinessApplication',
+    description:
+      'People, shifts, a time clock, attendance, skills and labor planning for kitting, 3PL and contract packaging floors.',
+  },
+  ledger: {
+    name: 'KitStak Ledger',
+    path: '/ledger',
+    category: 'BusinessApplication',
+    description:
+      'Invoices, collections, vendor bills, expenses, bank reconciliation and month-end close for kitting, 3PL and contract packaging shops.',
+  },
 };
 
-/** One app as a SoftwareApplication with its monthly list price as the offer. */
-export function softwareApplicationLd(product: ProductId): Thing {
+/**
+ * One app as a SoftwareApplication. An app customers can start on carries its monthly list price as
+ * the offer. Crew and Ledger before launch carry no offer and say "Coming soon", because nobody can
+ * buy them yet and the data says only what the page says.
+ */
+export function softwareApplicationLd(product: SiteProductId): Thing {
   const facts = APP_FACTS[product];
+  const base: Thing = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: facts.name,
+    url: absoluteUrl(facts.path),
+    applicationCategory: facts.category,
+    operatingSystem: 'Web browser',
+    publisher: { '@id': ORG_ID },
+  };
+  if (!isAppLive(product) || !isProductId(product)) {
+    return { ...base, description: `${facts.description} Coming soon.` };
+  }
   const pricing = priceOf(product);
   const unit =
     pricing.quantityFrom === 'seats'
@@ -117,14 +148,8 @@ export function softwareApplicationLd(product: ProductId): Thing {
         ? 'Per warehouse'
         : 'Per organization';
   return {
-    '@context': 'https://schema.org',
-    '@type': 'SoftwareApplication',
-    name: facts.name,
-    url: absoluteUrl(facts.path),
-    applicationCategory: facts.category,
-    operatingSystem: 'Web browser',
+    ...base,
     description: facts.description,
-    publisher: { '@id': ORG_ID },
     offers: {
       '@type': 'Offer',
       price: (pricing.cents.monthly / 100).toFixed(2),
@@ -133,39 +158,6 @@ export function softwareApplicationLd(product: ProductId): Thing {
       description: `${unit} each month. ${TRIAL_DAYS} days free, no card needed.`,
       availability: 'https://schema.org/InStock',
     },
-  };
-}
-
-/** What each planned app will be. The words match the Crew and Ledger pages. */
-const PLANNED_FACTS: Readonly<Record<PlannedProductId, AppFacts>> = {
-  crew: {
-    name: 'KitStak Crew',
-    path: '/crew',
-    category: 'BusinessApplication',
-    description:
-      'People, shifts, a time clock, attendance, skills and labor planning for kitting, 3PL and contract packaging floors. Coming soon.',
-  },
-  ledger: {
-    name: 'KitStak Ledger',
-    path: '/ledger',
-    category: 'BusinessApplication',
-    description:
-      'Invoices, collections, vendor bills, expenses, bank reconciliation and month-end close for kitting, 3PL and contract packaging shops. Coming soon.',
-  },
-};
-
-/** A planned app as a SoftwareApplication. No offer: nobody can buy it yet, and the data says only what the page says. */
-export function plannedApplicationLd(product: PlannedProductId): Thing {
-  const facts = PLANNED_FACTS[product];
-  return {
-    '@context': 'https://schema.org',
-    '@type': 'SoftwareApplication',
-    name: facts.name,
-    url: absoluteUrl(facts.path),
-    applicationCategory: facts.category,
-    operatingSystem: 'Web browser',
-    description: facts.description,
-    publisher: { '@id': ORG_ID },
   };
 }
 

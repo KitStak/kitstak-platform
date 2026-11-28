@@ -17,8 +17,8 @@ export interface ProductNav {
   readonly links: readonly NavLink[];
 }
 
-/** Products shown in the header menu, the mobile drawer and the footer. */
-export const PRODUCT_NAV: readonly ProductNav[] = [
+/** The four apps that have always been open. */
+const CORE_NAV: readonly ProductNav[] = [
   {
     id: 'wms',
     href: ROUTES.wms,
@@ -78,11 +78,11 @@ export const PRODUCT_NAV: readonly ProductNav[] = [
 ];
 
 /**
- * Apps that are announced but not open yet (Crew, Ledger). They get their own "Coming soon" row in
- * the Products menu and sit after the live apps in the drawer and the footer. No deep links: the
- * pages are short and the visitor should land on the top.
+ * Crew and Ledger. Before launch they get their own "Coming soon" row in the Products menu and sit
+ * after the live apps in the drawer and the footer. When a go-live switch is on, that app moves into
+ * PRODUCT_NAV with the others. No deep links before launch: the visitor should land on the top.
  */
-export const PLANNED_NAV: readonly ProductNav[] = [
+const ANNOUNCED_NAV: readonly ProductNav[] = [
   {
     id: 'crew',
     href: ROUTES.crew,
@@ -102,6 +102,15 @@ export const PLANNED_NAV: readonly ProductNav[] = [
     links: [],
   },
 ];
+
+/** Products shown in the header menu, the mobile drawer and the footer: every app you can start on. */
+export const PRODUCT_NAV: readonly ProductNav[] = [
+  ...CORE_NAV,
+  ...ANNOUNCED_NAV.filter((product) => product.status === null),
+];
+
+/** Crew and Ledger while they are "Coming soon". Empty once both are live. */
+export const PLANNED_NAV: readonly ProductNav[] = ANNOUNCED_NAV.filter((product) => product.status !== null);
 
 /** Top-level header links (the Products menu is rendered separately, before these). */
 export const PRIMARY_NAV: readonly NavLink[] = [

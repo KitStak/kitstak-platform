@@ -75,6 +75,12 @@
 .switch[data-product='pulse'][aria-checked='true'] .slab {
   background: var(--stak-pulse);
 }
+.switch[data-product='crew'][aria-checked='true'] .slab {
+  background: var(--stak-crew);
+}
+.switch[data-product='ledger'][aria-checked='true'] .slab {
+  background: var(--stak-ledger);
+}
 .switchName {
   display: block;
   font-weight: var(--weight-semibold);

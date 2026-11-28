@@ -5,17 +5,23 @@
  * Ledger is the shop's own books. It is never KitStak's subscription billing, and the copy keeps
  * the words apart: "invoices" for the shop's customers, "billing" only for KitStak's plan.
  */
+import { TRIAL_LINE } from '@/lib/pricing';
+import { isAppLive } from '../site-links';
 import type { Feature } from '../product/chapter';
 import type { FaqItem } from '../product/cta';
 import type { HeroFact } from '../product/product-hero';
 import type { SubNavSection } from '../product/sub-nav';
 
+/** The page's go-live switch (LEDGER_IS_LIVE in site-links.ts). Copy below reads it. */
+const IS_LIVE = isAppLive('ledger');
+
 export const META = {
-  title: 'KitStak Ledger - invoices, collections, bills and month-end close (coming soon)',
-  description:
-    'KitStak Ledger is coming soon: invoices from your WMS bill lines, collections, vendor bills, expenses, bank reconciliation and one month-end close.',
+  title: IS_LIVE ? 'KitStak Ledger - invoices, collections, bills and month-end close' : 'KitStak Ledger - invoices, collections, bills and month-end close (coming soon)',
+  description: IS_LIVE
+    ? 'KitStak Ledger: invoices from your WMS bill lines, collections, vendor bills, expenses, bank reconciliation and one month-end close.'
+    : 'KitStak Ledger is coming soon: invoices from your WMS bill lines, collections, vendor bills, expenses, bank reconciliation and one month-end close.',
   socialTitle: 'KitStak Ledger. Bill it. Pay it. Close it.',
-  socialDescription: 'The money app for kitting, 3PL and contract packaging shops, on the same stack as the WMS and Pulse. Coming soon.',
+  socialDescription: IS_LIVE ? 'The money app for kitting, 3PL and contract packaging shops, on the same stack as the WMS and Pulse.' : 'The money app for kitting, 3PL and contract packaging shops, on the same stack as the WMS and Pulse. Coming soon.',
   url: 'https://kitstak.com/ledger',
 } as const;
 
@@ -178,11 +184,16 @@ export const PRICE_INCLUDED: readonly string[] = [
 export const FAQ_TITLE = 'Before you ask.';
 
 export const FAQ: readonly FaqItem[] = [
-  {
-    question: 'When can I use Ledger?',
-    answer:
-      'Ledger is coming soon and cannot be bought yet. Ask to be told when it is ready and we will email you once, when you can start.',
-  },
+  IS_LIVE
+    ? {
+        question: 'How do I start with Ledger?',
+        answer: `Start a free trial with Ledger switched on. ${TRIAL_LINE} Add it to an organization you already run from Billing.`,
+      }
+    : {
+        question: 'When can I use Ledger?',
+        answer:
+          'Ledger is coming soon and cannot be bought yet. Ask to be told when it is ready and we will email you once, when you can start.',
+      },
   {
     question: 'Does Ledger replace QuickBooks or Xero?',
     answer:
@@ -217,5 +228,7 @@ export const FAQ: readonly FaqItem[] = [
 
 export const CLOSING = {
   title: 'The last bar is the money.',
-  note: 'Ledger is coming soon. It will run on its own, or alongside the WMS, Pulse and the CRM with one sign-in.',
+  note: IS_LIVE
+    ? `${TRIAL_LINE} Ledger runs on its own, or alongside the WMS, Pulse and the CRM with one sign-in.`
+    : 'Ledger is coming soon. It will run on its own, or alongside the WMS, Pulse and the CRM with one sign-in.',
 } as const;

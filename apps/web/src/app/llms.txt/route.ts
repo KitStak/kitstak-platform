@@ -1,5 +1,6 @@
 import { ARTICLES } from '@/components/articles/articles-content';
 import { docApps } from '@/lib/docs/docs';
+import { comingSoonSentence, isAppLive } from '@/components/site-links';
 import { SITE_URL } from '@/lib/seo';
 
 export const dynamic = 'force-static';
@@ -15,8 +16,16 @@ export function GET(): Response {
     ['KitStak CRM', '/crm', 'Accounts, pipelines, boards, automations and dashboards.'],
     ['KitStak Projects', '/projects', 'Plans, tasks and timelines linked to CRM deals and WMS orders.'],
     ['KitStak Pulse', '/pulse', 'Profit by job, client and extra service.'],
-    ['KitStak Crew (coming soon)', '/crew', 'People, shifts, a time clock, attendance, skills and labor planning for the floor. Not available yet.'],
-    ['KitStak Ledger (coming soon)', '/ledger', 'Invoices, collections, vendor bills, expenses, bank reconciliation and month-end close. Not available yet.'],
+    [
+      isAppLive('crew') ? 'KitStak Crew' : 'KitStak Crew (coming soon)',
+      '/crew',
+      `People, shifts, a time clock, attendance, skills and labor planning for the floor.${isAppLive('crew') ? '' : ' Not available yet.'}`,
+    ],
+    [
+      isAppLive('ledger') ? 'KitStak Ledger' : 'KitStak Ledger (coming soon)',
+      '/ledger',
+      `Invoices, collections, vendor bills, expenses, bank reconciliation and month-end close.${isAppLive('ledger') ? '' : ' Not available yet.'}`,
+    ],
     ['Pricing', '/pricing', 'Prices for each app, the bundle discount and how billing works.'],
     ['Compare products', '/products', 'All four apps side by side.'],
     [
@@ -31,7 +40,7 @@ export function GET(): Response {
   const lines = [
     '# KitStak',
     '',
-    '> KitStak runs a CRM, a WMS, Projects and Pulse on one database and one sign-in. Use one app or any mix. Crew (people and shifts) and Ledger (invoices and bills) are coming soon. Built for warehouses, 3PLs and operations teams.',
+    `> KitStak runs a CRM, a WMS, Projects and Pulse on one database and one sign-in. Use one app or any mix.${comingSoonSentence()} Built for warehouses, 3PLs and operations teams.`,
     '',
     '## Products and company',
     '',

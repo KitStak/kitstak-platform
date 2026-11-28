@@ -77,6 +77,15 @@
   color: var(--stak-pulse-ink);
   animation-delay: 620ms;
 }
+.slab[data-product='crew'] {
+  background: var(--stak-crew);
+  animation-delay: 760ms;
+}
+.slab[data-product='ledger'] {
+  background: var(--stak-ledger);
+  color: var(--stak-ledger-ink);
+  animation-delay: 900ms;
+}
 .slab:hover {
   transform: translateX(12px);
   filter: brightness(1.08);
