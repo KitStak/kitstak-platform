@@ -24,3 +24,4 @@ export {
 } from './read';
 export { grantModule, revokeModule } from './grant';
 export { setEntitlement, type EntitlementWrite } from './write';
+export { PREVIEW_APPS, isPreviewApp, previewAccess, previewOrgSlugs, type PreviewApp } from './preview';
