@@ -1,6 +1,6 @@
 # KitStak Crew: product + build spec
 
-Status: draft for owner review (2026-11-27).
+Status: approved by the owner (2026-11-27). Every proposed default in 0.2 and every marked small choice is confirmed as written.
 
 The people app for kitting, 3PL and contract packaging floors: people, shifts, the time clock, attendance, skills and labor planning.
 Working tagline: *Staff it. Clock it. Plan it.* It runs standalone (only Crew licensed, CSV in and out) or bundled with Pulse, WMS,
@@ -44,7 +44,7 @@ ESLint and `copy-rules.test.ts`, copied from Pulse.
 | App shape | `apps/crew`, package `kitstak-crew`, dev port 3800, schema `crew`, bridge `@kitstak/crew-bridge`, origin `crew.kitstak.app` (`NEXT_PUBLIC_CREW_URL`). Same stack as Pulse and Projects. |
 | Pay rates | Stay in Pulse (reference 5.3). Crew keeps a plain wage per person only when Pulse is absent, for its own estimates, and offers it to Pulse the day Pulse is added. |
 
-### 0.2 Proposed, owner to confirm
+### 0.2 Proposed defaults, confirmed by the owner (2026-11-27)
 
 | # | Open question (reference 9) | Proposed default |
 |---|---|---|
@@ -54,7 +54,7 @@ ESLint and `copy-rules.test.ts`, copied from Pulse.
 | 4 | Attendance points | Raw late, early out, no call no show and called out records in the first release. A per org points policy comes later. |
 | 5 | Spanish | Kiosk and phone clock in English and Spanish at launch. The rest of the app English first. |
 
-Smaller choices made in this spec are marked **(choice)** where they appear, so the owner can find them.
+Smaller choices made in this spec are marked **(choice)** where they appear. The owner confirmed all of them on 2026-11-27.
 
 ## 1. Topology
 

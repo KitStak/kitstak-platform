@@ -1,6 +1,6 @@
 # KitStak | Ledger: reference
 
-Status: reference only (2026-11-27). This is not a spec and nothing here is approved to build. It records what Ledger is for, where its
+Status: reference (2026-11-27). The approved build spec is [`SPEC.md`](SPEC.md); where the two differ, the spec wins. It records what Ledger is for, where its
 edges are, and how it would fit the apps that already exist, so a later spec starts from settled ground. Read it with
 [`docs/crew/REFERENCE.md`](../crew/REFERENCE.md), its sibling.
 

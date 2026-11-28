@@ -1,6 +1,6 @@
 # KitStak Ledger: product + build spec
 
-Status: draft for owner review (2026-11-27).
+Status: approved by the owner (2026-11-27). Every proposed default in 0.2 and every marked small choice is confirmed as written.
 
 The money app for kitting, 3PL and contract packaging shops: invoices and collections, vendor bills and payments, expenses, bank reconciliation and month-end
 close. Tagline: *Bill it. Pay it. Close it.* It runs alone (only Ledger, CSV in and out, customers kept in `core`) or bundled with WMS, Pulse, Projects, CRM,
@@ -52,7 +52,7 @@ Approved, `scheduled` Scheduled.
 | D6 | App `apps/ledger`, package `kitstak-ledger`, dev port **3700**, schema `ledger`, bridge `@kitstak/ledger-bridge`, origin `ledger.kitstak.app` (`NEXT_PUBLIC_LEDGER_URL`). Same stack as Pulse and Projects. |
 | D7 | Money: whole cents as `bigint`, unit prices to 4 decimals, work dates plain `YYYY-MM-DD`. Billing (KitStak's subscription) and invoicing (the shop's customers) never share tables or wording. |
 
-### 0.2 Proposed, owner to confirm
+### 0.2 Proposed defaults, confirmed by the owner (2026-11-27)
 
 | # | Open question (reference 9) | Proposed default |
 |-|-|-|
@@ -62,7 +62,7 @@ Approved, `scheduled` Scheduled.
 | P4 | Bank feeds | A bank feed provider interface with CSV and OFX statement import first (4.9). A live feed provider is chosen later and plugs into the same interface. |
 | P5 | Sales tax | A per org rate table applied per line. No tax engine (4.5.5). |
 
-### 0.3 Small calls made in this spec (listed again in the report so the owner can look)
+### 0.3 Small calls made in this spec (confirmed by the owner, 2026-11-27)
 
 Each is marked "(call)" where it appears. The main ones: invoice numbers are given when an invoice is sent, not while it is a draft (4.5.2); accruals book only
 positive gaps (work done ahead of billing), never deferred revenue (4.10); a write off goes wholly to bad debt with no sales tax relief (4.5.7); expense
