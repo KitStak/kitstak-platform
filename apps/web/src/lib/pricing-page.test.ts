@@ -14,7 +14,7 @@ import { BillingRules } from '@/components/pricing/billing-rules';
 import { BILLING_RULES, CALCULATOR, CARDS_NOTE, HERO, PRICING_FAQ } from '@/components/pricing/pricing-content';
 import { PricingExplorer } from '@/components/pricing/pricing-explorer';
 import { PriceBand } from '@/components/product/price-band';
-import { LINKS, PRODUCT_IDS, ROUTES } from '@/components/site-links';
+import { COMING_SOON, LINKS, PLANNED_PRODUCT_IDS, PRODUCT_IDS, ROUTES } from '@/components/site-links';
 import { BundleCalculator, PriceCalculator } from '@/components/stak/bundle-calculator';
 import { AccountStep } from '@/components/wizard/account-step';
 import { CALCULATOR_START } from './calculator';
@@ -254,8 +254,11 @@ describe('wizard account step', () => {
 
 /* ------------------------------------------------------------------ Copy rules */
 
-/** No em dash, no en dash, no double hyphen, no placeholder words. */
-const BANNED = /[—–]|--|coming soon|lorem|preliminary/i;
+/**
+ * No em dash, no en dash, no double hyphen, no placeholder words. "Coming soon" is allowed only on
+ * the Crew and Ledger cards, which the test below checks.
+ */
+const BANNED = /[—–]|--|lorem|preliminary/i;
 
 function sentences(copy: string): readonly string[] {
   return copy
@@ -294,6 +297,13 @@ describe('copy rules on the new pricing surfaces', () => {
     for (const copy of [...written, ...rendered]) expect(copy).not.toMatch(BANNED);
   });
 
+  test('says "Coming soon" only for Crew and Ledger, never on an app you can buy', () => {
+    const card = (id: string) => new RegExp(`data-testid="price-card-${id}"[\\s\\S]*?</article>`).exec(explorer)?.[0] ?? '';
+    for (const id of [...PRODUCT_IDS, ...PLANNED_PRODUCT_IDS]) expect(card(id), id).not.toBe('');
+    for (const id of PRODUCT_IDS) expect(card(id), id).not.toContain(COMING_SOON);
+    for (const id of PLANNED_PRODUCT_IDS) expect(card(id), id).toContain(COMING_SOON);
+  });
+
   test('every sentence is 20 words or fewer', () => {
     for (const copy of written) {
       for (const sentence of sentences(copy)) {
@@ -304,7 +314,7 @@ describe('copy rules on the new pricing surfaces', () => {
 
   test('every dollar figure on the pricing page shows its cents unless it is a whole dollar list price', () => {
     const figures = rendered.join(' ').match(/-?\$[\d,]+(\.\d+)?/g) ?? [];
-    const listPrices = new Set<string>(PRODUCT_IDS.map(listPrice));
+    const listPrices = new Set<string>([...PRODUCT_IDS, ...PLANNED_PRODUCT_IDS].map(listPrice));
     // "$145" and "$349" inside a math line are list price times quantity, written by the shared quote.
     const mathFigures = new Set(
       rendered

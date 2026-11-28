@@ -5,7 +5,10 @@ import { useEffect, useRef } from 'react';
 import { LINKS, ROUTES, START_LABEL, startFreeHref } from '../site-links';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
-import { PRIMARY_NAV, PRODUCT_NAV, isCurrentPath } from './nav-data';
+import { PLANNED_NAV, PRIMARY_NAV, PRODUCT_NAV, isCurrentPath } from './nav-data';
+
+/** The drawer lists the live apps, then the ones coming soon, in one list. */
+const DRAWER_PRODUCTS = [...PRODUCT_NAV, ...PLANNED_NAV];
 import styles from './mobile-menu.module.css';
 
 const DESKTOP_QUERY = '(min-width: 901px)';
@@ -57,7 +60,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
       <nav aria-label="Menu" className={`container ${styles.inner}`}>
         <p className={styles.heading}>Products</p>
         <ul className={styles.products}>
-          {PRODUCT_NAV.map((product, i) => (
+          {DRAWER_PRODUCTS.map((product, i) => (
             <li key={product.id} style={{ '--i': i } as React.CSSProperties}>
               <Link
                 href={product.href}
@@ -76,7 +79,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
               </Link>
             </li>
           ))}
-          <li style={{ '--i': PRODUCT_NAV.length } as React.CSSProperties}>
+          <li style={{ '--i': DRAWER_PRODUCTS.length } as React.CSSProperties}>
             <Link
               href={ROUTES.products}
               className={styles.product}
@@ -94,7 +97,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
 
         <ul className={styles.links}>
           {PRIMARY_NAV.map((item, i) => (
-            <li key={item.href} style={{ '--i': i + PRODUCT_NAV.length + 1 } as React.CSSProperties}>
+            <li key={item.href} style={{ '--i': i + DRAWER_PRODUCTS.length + 1 } as React.CSSProperties}>
               <Link
                 href={item.href}
                 aria-current={isCurrentPath(pathname, item.href) ? 'page' : undefined}
@@ -104,7 +107,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
               </Link>
             </li>
           ))}
-          <li style={{ '--i': PRIMARY_NAV.length + PRODUCT_NAV.length + 1 } as React.CSSProperties}>
+          <li style={{ '--i': PRIMARY_NAV.length + DRAWER_PRODUCTS.length + 1 } as React.CSSProperties}>
             <Link href={ROUTES.founder} onClick={onClose}>
               Talk to the founder
             </Link>

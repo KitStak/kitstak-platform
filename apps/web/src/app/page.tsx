@@ -8,6 +8,7 @@ import { Header } from '@/components/header';
 import { Hero } from '@/components/hero/hero';
 import { LicensingSection } from '@/components/licensing/licensing-section';
 import { PageEffects } from '@/components/page-effects';
+import { ComingSoon } from '@/components/products/coming-soon';
 import { PulseHomeSection } from '@/components/pulse/pulse-section-home';
 import { WmsSection } from '@/components/wms/wms-section';
 
@@ -25,6 +26,7 @@ export default function HomePage() {
         <WmsSection />
         <CrmSection />
         <PulseHomeSection />
+        <ComingSoon title="Two more bars on the way." />
         <Team1Band />
         <LicensingSection />
         <ClosingSection />

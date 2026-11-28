@@ -4,7 +4,7 @@ import { DOCS_UPDATED, allDocPages, docApps } from '@/lib/docs/docs';
 import { SITE_URL } from '@/lib/seo';
 
 /** The day the pages below last changed in a way a reader would notice. Bump it with real edits. */
-const SITE_UPDATED = '2026-11-25';
+const SITE_UPDATED = '2026-11-27';
 
 type Freq = NonNullable<MetadataRoute.Sitemap[number]['changeFrequency']>;
 
@@ -16,6 +16,8 @@ const PAGES: readonly { readonly path: string; readonly priority: number; readon
     { path: '/crm', priority: 0.9, changeFrequency: 'monthly' },
     { path: '/projects', priority: 0.9, changeFrequency: 'monthly' },
     { path: '/pulse', priority: 0.9, changeFrequency: 'monthly' },
+    { path: '/crew', priority: 0.7, changeFrequency: 'monthly' },
+    { path: '/ledger', priority: 0.7, changeFrequency: 'monthly' },
     { path: '/pricing', priority: 0.9, changeFrequency: 'monthly' },
     { path: '/customers', priority: 0.7, changeFrequency: 'monthly' },
     { path: '/customers/team-1', priority: 0.8, changeFrequency: 'monthly' },

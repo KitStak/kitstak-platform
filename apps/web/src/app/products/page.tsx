@@ -11,10 +11,14 @@ import { Faq, FounderBand } from '@/components/product/cta';
 import type { FaqItem } from '@/components/product/cta';
 import { SubNav } from '@/components/product/sub-nav';
 import type { SubNavSection } from '@/components/product/sub-nav';
+import { ComingSoon } from '@/components/products/coming-soon';
 import { Compare, Lineup, StackHero, StartSteps } from '@/components/products/products-sections';
 import { BundleCalculator } from '@/components/stak/bundle-calculator';
 import { ROUTES, isAppLive } from '@/components/site-links';
 import { BUNDLE_OFF, TRIAL_DAYS, YEARLY_OFF, includedSeatsLabel, priceInWords } from '@/lib/pricing';
+
+/** Crew and Ledger have planned prices and no app yet. Said once, the same way, in every answer that prices them. */
+const PLANNED_PRICES = `Crew and Ledger are coming soon. Crew is planned at ${priceInWords('crew')} and Ledger at ${priceInWords('ledger')}, and you cannot buy either yet.`;
 import styles from './products.module.css';
 
 export const metadata: Metadata = {
@@ -33,6 +37,7 @@ export const metadata: Metadata = {
 
 const SECTIONS: readonly SubNavSection[] = [
   { id: 'lineup', label: 'Products' },
+  { id: 'coming-soon', label: 'Coming soon' },
   { id: 'together', label: 'Better stacked' },
   { id: 'pricing', label: 'Pricing' },
   { id: 'start', label: 'Getting started' },
@@ -46,6 +51,11 @@ const PULSE_SOON = isAppLive('pulse')
 
 const FAQ: readonly FaqItem[] = [
   {
+    question: 'When can I get Crew and Ledger?',
+    answer:
+      'Both are coming soon. Open either page and ask to be told when it is ready, and we will email you once, when you can start. When they open, they count toward the bundle like every other app.',
+  },
+  {
     question: 'Can I start with one product and add the others later?',
     answer: `Yes. Each product is licensed on its own. When you add a second one, your organization, your team and your customer list are already there, and the bundle price applies to every product from then on.${PULSE_SOON}`,
   },
@@ -56,7 +66,7 @@ const FAQ: readonly FaqItem[] = [
   },
   {
     question: 'How is each product priced?',
-    answer: `The CRM is ${priceInWords('crm')}. Projects is ${priceInWords('projects')}. The WMS is ${priceInWords('wms')}. Pulse is ${priceInWords('pulse')}. ${includedSeatsLabel('pulse')}. With two or more apps you save ${BUNDLE_OFF} on every app. Pay yearly and you save ${YEARLY_OFF} more. Every plan starts with ${TRIAL_DAYS} days free, and no card is needed. The calculator on this page shows the math.`,
+    answer: `The CRM is ${priceInWords('crm')}. Projects is ${priceInWords('projects')}. The WMS is ${priceInWords('wms')}. Pulse is ${priceInWords('pulse')}. ${includedSeatsLabel('pulse')}. With two or more apps you save ${BUNDLE_OFF} on every app. Pay yearly and you save ${YEARLY_OFF} more. Every plan starts with ${TRIAL_DAYS} days free, and no card is needed. The calculator on this page shows the math. ${PLANNED_PRICES}`,
   },
   {
     question: 'Do I have to talk to someone to get started?',
@@ -79,6 +89,7 @@ export default function ProductsPage() {
         <StackHero />
         <SubNav current="products" sections={SECTIONS} />
         <Lineup />
+        <ComingSoon />
         <Compare
           visual={
             <AccountLink caption="One customer record, shown here in the CRM and the WMS. Projects and Pulse link to it too. Sample data." />

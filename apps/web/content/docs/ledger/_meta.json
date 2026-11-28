@@ -1,0 +1,11 @@
+{
+  "title": "KitStak Ledger",
+  "description": "Planned: the money app for kitting, 3PL and contract packaging shops, with invoices, collections, bills, expenses, bank matching and month-end close.",
+  "sections": [
+    "Get started",
+    "Getting paid",
+    "Paying out",
+    "Bank and close",
+    "Connected apps"
+  ]
+}

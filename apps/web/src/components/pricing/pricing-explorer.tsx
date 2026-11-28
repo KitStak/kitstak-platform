@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
+  PLANNED_PRICE_NOTE,
   TRIAL_LINE,
   YEARLY_OFF,
   includedSeatsLabel,
@@ -11,32 +12,27 @@ import {
   unitPerMonth,
   unitPerYear,
 } from '@/lib/pricing';
-import type { BillingInterval, PlanSelection } from '@/lib/pricing';
+import type { BillingInterval, PlanSelection, PricedProductId } from '@/lib/pricing';
 import { CALCULATOR_START, selectionFromSearch } from '@/lib/calculator';
 import { trialUrl } from '@/lib/stak';
 import { AppIcon } from '../app-icon';
 import {
+  COMING_SOON,
+  PLANNED_PRODUCT_IDS,
   PRODUCT_IDS,
-  ROUTES,
+  PRODUCT_ROUTE,
   isAppLive,
   startLink,
   START_LABEL,
 } from '../site-links';
-import type { ProductId } from '../site-links';
+import type { PlannedProductId, ProductId } from '../site-links';
 import { PriceCalculator } from '../stak/bundle-calculator';
 import { BillingToggle } from '../stak/stak-parts';
-import { CALCULATOR, CARDS_NOTE, HERO } from './pricing-content';
+import { CALCULATOR, CARDS_NOTE, HERO, PLANNED_LEAD } from './pricing-content';
 import styles from './pricing.module.css';
 
-const PRODUCT_ROUTE: Readonly<Record<ProductId, string>> = {
-  crm: ROUTES.crm,
-  wms: ROUTES.wms,
-  projects: ROUTES.projects,
-  pulse: ROUTES.pulse,
-};
-
 /** The small line under a card's price. It says what paying yearly changes, in both positions of the switch. */
-function yearlyLine(product: ProductId, interval: BillingInterval): string {
+function yearlyLine(product: PricedProductId, interval: BillingInterval): string {
   const price = priceOf(product);
   if (interval === 'monthly') return `Save ${YEARLY_OFF} when you pay yearly.`;
   return price.quantityFrom === 'flat'
@@ -93,6 +89,44 @@ function PriceCard({ product, interval }: PriceCardProps) {
 }
 
 /**
+ * A card for an app with a planned price and no app yet (Crew, Ledger). It follows the monthly and
+ * yearly switch like the others, says plainly that it cannot be bought, and asks to be told instead.
+ */
+function PlannedPriceCard({ product, interval }: { readonly product: PlannedProductId; readonly interval: BillingInterval }) {
+  const price = priceOf(product);
+  const seats = includedSeatsLabel(product);
+  const notify = startLink(product);
+  return (
+    <article className={styles.card} data-product={product} data-planned data-testid={`price-card-${product}`}>
+      <header className={styles.cardHead}>
+        <AppIcon app={product} size={44} />
+        <h3 className={styles.cardName}>{price.name}</h3>
+        <span className={styles.cardSoon}>{COMING_SOON}</span>
+      </header>
+      <p className={styles.cardLine}>{price.tagline}</p>
+      <p className={styles.cardPrice}>
+        <span className={`numeral ${styles.cardFigure}`} data-testid={`price-card-figure-${product}`}>
+          {unitPerMonth(product, interval)}
+        </span>
+        <span className={styles.cardTerms}>
+          {monthlyTerms(product)}
+          {seats ? `. ${seats}.` : ''}
+        </span>
+      </p>
+      <p className={styles.cardYearly}>
+        {yearlyLine(product, interval)} {PLANNED_PRICE_NOTE}
+      </p>
+      <Link href={notify.href} className={`btn btn-ghost btn-block ${styles.cardStart}`}>
+        {notify.label}
+      </Link>
+      <Link href={PRODUCT_ROUTE[product]} className={styles.cardMore}>
+        See what is in {price.shortName} <span aria-hidden>→</span>
+      </Link>
+    </article>
+  );
+}
+
+/**
  * The top of the pricing page: the heading with the monthly and yearly switch, the four app cards
  * and the calculator. They share one cart, so the switch in the heading, the cards and the
  * calculator always agree.
@@ -132,6 +166,21 @@ export function PricingExplorer() {
           <p className={styles.cardsNote}>
             <strong>{CARDS_NOTE}</strong> {TRIAL_LINE}
           </p>
+        </div>
+      </section>
+
+      {/* Planned apps: shown with their price, never in the calculator or a sign-up link. */}
+      <section id="coming-soon" className={styles.plannedBand} aria-labelledby="coming-soon-heading">
+        <div className="container">
+          <h2 id="coming-soon-heading" className={styles.plannedTitle}>
+            {COMING_SOON}
+          </h2>
+          <p className={styles.plannedLead}>{PLANNED_LEAD}</p>
+          <div className={`${styles.cards} ${styles.plannedCards}`}>
+            {PLANNED_PRODUCT_IDS.map((id) => (
+              <PlannedPriceCard key={id} product={id} interval={selection.interval} />
+            ))}
+          </div>
         </div>
       </section>
 

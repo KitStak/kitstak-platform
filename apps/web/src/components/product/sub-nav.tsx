@@ -13,7 +13,7 @@ export interface SubNavSection {
 
 interface SubNavProps {
   /** Which page this bar sits on; lights the matching entry in the product switch. */
-  readonly current: 'wms' | 'crm' | 'projects' | 'pulse' | 'products';
+  readonly current: 'wms' | 'crm' | 'projects' | 'pulse' | 'crew' | 'ledger' | 'products';
   readonly sections: readonly SubNavSection[];
   /** Product-specific action shown once the bar sticks. Omit where the header's own action is the same. */
   readonly cta?: { readonly href: string; readonly label: string };
@@ -24,6 +24,8 @@ const SWITCH = [
   { id: 'crm', href: ROUTES.crm, label: 'CRM' },
   { id: 'projects', href: ROUTES.projects, label: 'Projects' },
   { id: 'pulse', href: ROUTES.pulse, label: 'Pulse' },
+  { id: 'crew', href: ROUTES.crew, label: 'Crew' },
+  { id: 'ledger', href: ROUTES.ledger, label: 'Ledger' },
   { id: 'products', href: ROUTES.products, label: 'Stack' },
 ] as const;
 

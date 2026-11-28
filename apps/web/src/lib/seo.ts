@@ -5,7 +5,7 @@
  *
  * Validate a page with https://search.google.com/test/rich-results after a change.
  */
-import type { ProductId } from '@/lib/pricing';
+import type { PlannedProductId, ProductId } from '@/lib/pricing';
 import { CATALOG, TRIAL_DAYS, priceOf } from '@/lib/pricing';
 import { CONTACT } from '@/components/site-links';
 
@@ -133,6 +133,39 @@ export function softwareApplicationLd(product: ProductId): Thing {
       description: `${unit} each month. ${TRIAL_DAYS} days free, no card needed.`,
       availability: 'https://schema.org/InStock',
     },
+  };
+}
+
+/** What each planned app will be. The words match the Crew and Ledger pages. */
+const PLANNED_FACTS: Readonly<Record<PlannedProductId, AppFacts>> = {
+  crew: {
+    name: 'KitStak Crew',
+    path: '/crew',
+    category: 'BusinessApplication',
+    description:
+      'People, shifts, a time clock, attendance, skills and labor planning for kitting, 3PL and contract packaging floors. Coming soon.',
+  },
+  ledger: {
+    name: 'KitStak Ledger',
+    path: '/ledger',
+    category: 'BusinessApplication',
+    description:
+      'Invoices, collections, vendor bills, expenses, bank reconciliation and month-end close for kitting, 3PL and contract packaging shops. Coming soon.',
+  },
+};
+
+/** A planned app as a SoftwareApplication. No offer: nobody can buy it yet, and the data says only what the page says. */
+export function plannedApplicationLd(product: PlannedProductId): Thing {
+  const facts = PLANNED_FACTS[product];
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: facts.name,
+    url: absoluteUrl(facts.path),
+    applicationCategory: facts.category,
+    operatingSystem: 'Web browser',
+    description: facts.description,
+    publisher: { '@id': ORG_ID },
   };
 }
 

@@ -28,18 +28,18 @@ describe('AppIcon', () => {
     expect(markup).not.toContain('<rect ');
   });
 
-  test('draws the planned Ledger icon as the red bar over the pink stem', () => {
+  test('draws the planned Ledger icon as the red bar over the pink stem, inside the live icon box', () => {
     const markup = render('ledger');
 
-    expect(markup).toContain('x="40" y="40" width="120" height="30" fill="#C8102E"');
-    expect(markup).toContain('x="85" y="86" width="30" height="74" fill="#D65A6E"');
+    expect(markup).toContain('x="46" y="50" width="108" height="26" fill="#C8102E"');
+    expect(markup).toContain('x="87" y="87" width="26" height="63" fill="#D65A6E"');
   });
 
-  test('draws the planned Crew icon from the brand file "people" shapes', () => {
+  test('draws the planned Crew icon from the brand file "people" shapes, scaled to the live icon box', () => {
     const markup = render('crew');
 
-    expect(markup).toContain('points="70,44 130,44 100,96" fill="#D65A6E"');
-    expect(markup).toContain('points="40,156 100,104 160,156 125.38,156 100,134 74.62,156" fill="#C8102E"');
+    expect(markup).toContain('points="73.21,50 126.79,50 100,96.43" fill="#D65A6E"');
+    expect(markup).toContain('points="46.43,150 100,103.57 153.57,150 122.66,150 100,130.36 77.34,150" fill="#C8102E"');
     expect(markup).not.toContain('<rect ');
   });
 

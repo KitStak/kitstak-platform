@@ -12,6 +12,7 @@ import {
   YEARLY_OFF,
   includedSeatsLabel,
   midMonthSeatExample,
+  priceInWords,
   priceOf,
 } from '@/lib/pricing';
 
@@ -23,6 +24,10 @@ export const HERO = {
 } as const;
 
 export const CARDS_NOTE = `Use two or more apps and save ${BUNDLE_OFF} on every one.`;
+
+/** Above the Crew and Ledger cards. */
+export const PLANNED_LEAD =
+  'Crew and Ledger have prices but no app yet. They are not in the calculator. When they open, they count toward the bundle like every other app.';
 
 export const CALCULATOR = {
   title: 'Price your plan.',
@@ -109,6 +114,10 @@ export const PRICING_FAQ: readonly FaqItem[] = [
   {
     question: 'How many people can use Pulse?',
     answer: `${includedSeatsLabel('pulse')}. That is ${pulseSeats} people for one flat price. For a bigger team, talk to us.`,
+  },
+  {
+    question: 'When can I buy Crew or Ledger?',
+    answer: `Not yet. Crew is planned at ${priceInWords('crew')}. Ledger is planned at ${priceInWords('ledger')}, ${includedSeatsLabel('ledger')?.toLowerCase()}. Ask to be told when they open.`,
   },
   {
     question: 'Is sales tax included?',

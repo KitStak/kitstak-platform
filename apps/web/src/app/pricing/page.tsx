@@ -11,7 +11,7 @@ import { PricingExplorer } from '@/components/pricing/pricing-explorer';
 import { Faq } from '@/components/product/cta';
 import { BUNDLE_OFF, TRIAL_LINE, priceInWords } from '@/lib/pricing';
 
-const DESCRIPTION = `KitStak CRM is ${priceInWords('crm')}. Projects is ${priceInWords('projects')}. The WMS is ${priceInWords('wms')}. Pulse is ${priceInWords('pulse')}. Save ${BUNDLE_OFF} with two or more apps. ${TRIAL_LINE}`;
+const DESCRIPTION = `KitStak CRM is ${priceInWords('crm')}. Projects is ${priceInWords('projects')}. The WMS is ${priceInWords('wms')}. Pulse is ${priceInWords('pulse')}. Save ${BUNDLE_OFF} with two or more apps. ${TRIAL_LINE} Crew and Ledger are coming soon.`;
 
 export const metadata: Metadata = {
   title: 'KitStak pricing - simple prices for the CRM, the WMS, Projects and Pulse',

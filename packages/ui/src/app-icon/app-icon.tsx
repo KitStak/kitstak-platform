@@ -74,20 +74,22 @@ const ICONS: Readonly<Record<AppIconId, { readonly offsetY: number; readonly sha
       ['40,117 82,117 100,99 118,117 160,117 160,147 118,147 100,129 82,147 40,147', PINK],
     ],
   },
-  // Planned. A T: the red bar over a pink stem.
+  // Planned. A T: the red bar over a pink stem. Redrawn from the brand file to fill the same
+  // 100 tall box as the live icons, with the CRM icon's 26 thick bars and 11 gap.
   ledger: {
     offsetY: 0,
     shapes: [
-      [40, 40, 120, 30, RED],
-      [85, 86, 30, 74, PINK],
+      [46, 50, 108, 26, RED],
+      [87, 87, 26, 63, PINK],
     ],
   },
-  // Planned. Named "people" in the brand export: a pink head over red shoulders.
+  // Planned. Named "people" in the brand export: a pink head over red shoulders. The brand file's
+  // shapes scaled by 25/28 about the centre, so they run y 50 to 150 like the live icons.
   crew: {
     offsetY: 0,
     shapes: [
-      ['70,44 130,44 100,96', PINK],
-      ['40,156 100,104 160,156 125.38,156 100,134 74.62,156', RED],
+      ['73.21,50 126.79,50 100,96.43', PINK],
+      ['46.43,150 100,103.57 153.57,150 122.66,150 100,130.36 77.34,150', RED],
     ],
   },
 };
@@ -100,10 +102,9 @@ export interface AppIconProps {
 }
 
 /**
- * Where the artwork sits on the 200×200 artboard, across the five live app icons (x 34 to 166, y 50 to 150).
+ * Where the artwork sits on the 200×200 artboard, across every app icon (x 34 to 166, y 50 to 150).
  * Use it as a view box to draw an icon without the file's padding, as the KitStak lockup does.
- * The planned Ledger (y 40 to 160) and Crew (y 44 to 156) icons run taller; widen this box before either
- * goes into a lockup, or their tops and bottoms are cut off.
+ * The planned Ledger and Crew icons were resized to fit inside it, so they line up with the others.
  */
 export const APP_ICON_ARTWORK_BOX = { x: 34, y: 50, width: 132, height: 100 } as const;
 

@@ -137,6 +137,73 @@ export const CATALOG: {
   },
 };
 
+/**
+ * Apps that are announced with a price but cannot be bought yet: Crew (docs/crew/REFERENCE.md) and Ledger
+ * (docs/ledger/REFERENCE.md). The owner set these prices on 2026-11-27 so kitstak.com can show them beside
+ * "Coming soon". They are deliberately NOT in PRODUCT_IDS or CATALOG.products, so the quote, the price
+ * calculator, sign-up, Stripe and entitlements never see them. When an app ships, move its entry into
+ * PRODUCT_IDS and CATALOG.products (with its Stripe prices and module key) and delete it here.
+ */
+export const PLANNED_PRODUCT_IDS = ['crew', 'ledger'] as const;
+export type PlannedProductId = (typeof PLANNED_PRODUCT_IDS)[number];
+
+export interface PlannedProductPricing {
+  readonly id: PlannedProductId;
+  readonly name: string;
+  readonly shortName: string;
+  readonly tagline: string;
+  /** Crew is priced per person on the floor (temps included, no sign-in needed). Ledger is flat. */
+  readonly unit: 'person' | 'organization';
+  readonly unitPlural: string;
+  readonly quantityFrom: 'people' | 'flat';
+  /** Seats a flat price covers: ledger 5, crew null. */
+  readonly includedSeats: number | null;
+  /** Same four columns and the same discounts as CATALOG.products, so the move into it is a copy. */
+  readonly cents: {
+    readonly monthly: number;
+    readonly monthlyBundle: number;
+    readonly yearly: number;
+    readonly yearlyBundle: number;
+  };
+}
+
+export const PLANNED_PRODUCTS: Readonly<Record<PlannedProductId, PlannedProductPricing>> = {
+  crew: {
+    id: 'crew',
+    name: 'KitStak Crew',
+    shortName: 'Crew',
+    tagline: 'Schedule the floor, clock people in and plan the labor tomorrow needs.',
+    unit: 'person',
+    unitPlural: 'people',
+    quantityFrom: 'people',
+    includedSeats: null,
+    cents: { monthly: 400, monthlyBundle: 320, yearly: 4080, yearlyBundle: 3264 },
+  },
+  ledger: {
+    id: 'ledger',
+    name: 'KitStak Ledger',
+    shortName: 'Ledger',
+    tagline: 'Send invoices, collect what you are owed, pay bills and close the month.',
+    unit: 'organization',
+    unitPlural: 'organizations',
+    quantityFrom: 'flat',
+    includedSeats: 5,
+    cents: { monthly: 4900, monthlyBundle: 3920, yearly: 49980, yearlyBundle: 39984 },
+  },
+};
+
+export function isPlannedProductId(value: string): value is PlannedProductId {
+  return (PLANNED_PRODUCT_IDS as readonly string[]).includes(value);
+}
+
+/** 'per person each month', 'each year for your whole team'. The planned twin of priceTermsLabel. */
+export function plannedPriceTermsLabel(product: PlannedProductId, interval: BillingInterval): string {
+  const period = interval === 'yearly' ? 'year' : 'month';
+  const pricing = PLANNED_PRODUCTS[product];
+  if (pricing.quantityFrom === 'flat') return `each ${period} for your whole team`;
+  return `per ${pricing.unit} each ${period}`;
+}
+
 export const MAX_SEATS = 500;
 export const MAX_WAREHOUSES = 50;
 

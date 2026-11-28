@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { FULL_STACK, ROUTES, getStartedHref, isAppLive } from '../site-links';
 import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
-import { PRODUCT_NAV, isCurrentPath } from './nav-data';
+import { PLANNED_NAV, PRODUCT_NAV, isCurrentPath } from './nav-data';
 import styles from './products-menu.module.css';
 
 interface ProductsMenuProps {
@@ -48,6 +48,26 @@ export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuP
             </ul>
           </section>
         ))}
+
+        {/* The apps coming soon: one slim row under the four live ones, so the grid stays four wide. */}
+        <section className={styles.planned} aria-label="Coming soon">
+          <p className={styles.plannedLabel}>Coming soon</p>
+          {PLANNED_NAV.map((product) => (
+            <Link
+              key={product.id}
+              href={product.href}
+              className={styles.plannedItem}
+              aria-current={isCurrentPath(pathname, product.href) ? 'page' : undefined}
+              onClick={onNavigate}
+            >
+              <AppIcon app={product.id} size={32} />
+              <span>
+                <span className={styles.plannedName}>{product.name}</span>
+                <span className={styles.plannedBlurb}>{product.blurb}</span>
+              </span>
+            </Link>
+          ))}
+        </section>
 
         <aside className={styles.bundle} aria-label="Bundle">
           <StakMark lit="both" size={36} />

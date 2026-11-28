@@ -4,8 +4,12 @@ import {
   BILLING_INTERVALS,
   CATALOG,
   DEFAULT_SELECTION,
+  PLANNED_PRODUCTS,
+  PLANNED_PRODUCT_IDS,
   PRICING_IS_PLACEHOLDER,
   PRODUCT_IDS,
+  isPlannedProductId,
+  plannedPriceTermsLabel,
   allPriceKeys,
   daysLeft,
   formatDay,
@@ -85,6 +89,40 @@ describe('catalog prices', () => {
     expect(CATALOG.trialDays).toBe(14);
     expect(CATALOG.bundleMinProducts).toBe(2);
     expect(BILLING_INTERVALS).toEqual(['monthly', 'yearly']);
+  });
+});
+
+describe('planned products', () => {
+  it('holds the owner set prices for Crew and Ledger', () => {
+    expect(PLANNED_PRODUCTS.crew.cents.monthly).toBe(400);
+    expect(PLANNED_PRODUCTS.ledger.cents.monthly).toBe(4900);
+    expect(PLANNED_PRODUCTS.ledger.includedSeats).toBe(5);
+    expect(PLANNED_PRODUCTS.crew.includedSeats).toBeNull();
+  });
+
+  it.each(PLANNED_PRODUCT_IDS)('%s: the four columns follow the same discounts as the live apps', (product) => {
+    const { monthly, monthlyBundle, yearly, yearlyBundle } = PLANNED_PRODUCTS[product].cents;
+    expect(yearly * 100).toBe(monthly * 12 * (100 - CATALOG.yearlyPercentOff));
+    expect(monthlyBundle * 100).toBe(monthly * (100 - CATALOG.bundlePercentOff));
+    expect(yearlyBundle * 100).toBe(yearly * (100 - CATALOG.bundlePercentOff));
+    expect(Number.isInteger(yearly / 12)).toBe(true);
+    expect(Number.isInteger(yearlyBundle / 12)).toBe(true);
+  });
+
+  it('stays out of everything that can charge a card', () => {
+    for (const id of PLANNED_PRODUCT_IDS) {
+      expect(isProductId(id)).toBe(false);
+      expect(isPlannedProductId(id)).toBe(true);
+      expect(parseStack(id)).toEqual([]);
+      expect(normalizeSelection({ products: [id] }).products).toEqual([]);
+      expect(allPriceKeys().some((key) => key.includes(id))).toBe(false);
+    }
+    expect(isPlannedProductId('crm')).toBe(false);
+  });
+
+  it('words the price terms like the live apps', () => {
+    expect(plannedPriceTermsLabel('crew', 'monthly')).toBe('per person each month');
+    expect(plannedPriceTermsLabel('ledger', 'yearly')).toBe('each year for your whole team');
   });
 });
 
